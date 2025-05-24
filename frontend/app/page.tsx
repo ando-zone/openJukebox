@@ -8,14 +8,16 @@ import { useWebSocket } from '@/hooks/useWebSocket'
 
 export default function Home() {
   // 웹소켓 연결 및 상태 관리
-  const { 
-    state, 
-    addTrack, 
-    playTrack, 
-    pauseTrack, 
-    seekTrack, 
-    nextTrack, 
-    prevTrack 
+  const {
+    state,
+    addTrack,
+    playTrack,
+    pauseTrack,
+    seekTrack,
+    nextTrack,
+    prevTrack,
+    setOnSeek,
+    setOnPositionRequest
   } = useWebSocket();
 
   return (
@@ -29,12 +31,13 @@ export default function Home() {
             playlist={state.playlist}
             currentTrack={state.current_track}
             isPlaying={state.playing}
-            position={state.position}
             onPlay={playTrack}
             onPause={pauseTrack}
             onSeek={seekTrack}
             onNext={nextTrack}
             onPrev={prevTrack}
+            setOnSeek={setOnSeek}
+            setOnPositionRequest={setOnPositionRequest}
           />
         </div>
         

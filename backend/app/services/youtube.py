@@ -30,7 +30,12 @@ class YouTubeService:
             ).execute()
             
             videos = []
-            for item in search_response.get('items', []):
+            for item in search_response.get('items', []):                
+                # 채널 결과는 건너뛰기 - videoId가 없거나 kind가 channel인 경우
+                if 'videoId' not in item['id'] or item['id'].get('kind') == 'youtube#channel':
+                    print(f"채널 결과 건너뛰기: {item.get('snippet', {}).get('title', 'Unknown')}")
+                    continue
+                
                 video_id = item['id']['videoId']
                 video_info = {
                     'id': video_id,
