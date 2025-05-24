@@ -49,6 +49,13 @@ export default function YouTubePlayer({
   // 🎯 무한루프 방지: 서버에서 받은 seek인지 구분
   const [isServerSeek, setIsServerSeek] = useState(false);
   
+  // 🎯 사용자 seek 감지를 위한 이전 위치 추적
+  const lastPositionRef = useRef(0);
+  const positionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // �� 서버 seek 타임스탬프 추적
+  const serverSeekTimeRef = useRef(0);
+  
   // 현재 재생할 비디오
   const currentVideo = currentTrack !== null && playlist.length > 0 
     ? playlist[currentTrack] 
@@ -56,14 +63,54 @@ export default function YouTubePlayer({
 
   // ===== Effect 훅들 =====
   
-  // 트랙 변경 시 초기화
+  // 🎯 사용자 seek 감지를 위한 위치 모니터링 (개선된 버전)
   useEffect(() => {
-    console.log(`🎵 트랙 변경: ${currentTrack}`);
-    setIsPlayerReady(false);
-    setIsServerSeek(false);
-  }, [currentTrack]);
+    if (!isPlayerReady || !playerRef.current) return;
+    
+    // 기존 인터벌 정리
+    if (positionCheckIntervalRef.current) {
+      clearInterval(positionCheckIntervalRef.current);
+    }
+    
+    // 1초마다 위치 체크
+    const interval = setInterval(() => {
+      if (!playerRef.current) return;
+      
+      try {
+        const currentTime = Math.floor(playerRef.current.getCurrentTime());
+        const lastPos = lastPositionRef.current;
+        const timeDiff = Math.abs(currentTime - lastPos);
+        const now = Date.now();
+        
+        // 🎯 개선된 서버 seek 구분 로직
+        const isRecentServerSeek = (now - serverSeekTimeRef.current) < 3000; // 3초 이내
+        
+        console.log(`📊 위치 체크: ${lastPos}초 → ${currentTime}초 (차이: ${timeDiff}초, 서버seek: ${isRecentServerSeek})`);
+        
+        // 🎯 사용자 seek 감지 조건 (개선됨):
+        if (timeDiff >= 3 && !isRecentServerSeek && currentTime >= 5) {
+          console.log(`🎯 사용자 seek 감지: ${lastPos}초 → ${currentTime}초`);
+          console.log('👆 모든 사용자에게 위치 동기화 전송');
+          onSeek(currentTime);
+        }
+        
+        lastPositionRef.current = currentTime;
+      } catch (error) {
+        console.error('위치 체크 오류:', error);
+      }
+    }, 1000);
+    
+    positionCheckIntervalRef.current = interval;
+    
+    // 정리 함수
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isPlayerReady, onSeek]); // lastPosition 의존성 제거
   
-  // 🎯 seek 콜백 등록 - 서버에서 seek 이벤트 받으면 플레이어 이동
+  // 🎯 seek 콜백 등록 - 서버에서 seek 이벤트 받으면 플레이어 이동 (개선됨)
   useEffect(() => {
     setOnSeek((position: number) => {
       if (!isPlayerReady || !playerRef.current) {
@@ -74,17 +121,17 @@ export default function YouTubePlayer({
       console.log(`🎯 서버에서 seek 이벤트 수신: ${position}초 - 플레이어 이동`);
       
       try {
-        // 🎯 서버 seek 플래그 설정 (무한루프 방지)
-        setIsServerSeek(true);
+        // 🎯 서버 seek 타임스탬프 기록
+        serverSeekTimeRef.current = Date.now();
+        
+        // 🎯 예상 위치 미리 업데이트 (감지 방지)
+        lastPositionRef.current = position;
+        
         playerRef.current.seekTo(position, true);
         
-        // 1초 후 플래그 해제
-        setTimeout(() => {
-          setIsServerSeek(false);
-        }, 1000);
+        console.log(`⏰ 서버 seek 타임스탬프 기록: ${serverSeekTimeRef.current}`);
       } catch (error) {
         console.error('Seek 처리 오류:', error);
-        setIsServerSeek(false);
       }
     });
   }, [isPlayerReady, setOnSeek]);
