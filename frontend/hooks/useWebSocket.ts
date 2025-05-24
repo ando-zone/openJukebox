@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
 
 // 상태와 트랙 타입 정의
 interface Track {
@@ -27,98 +26,97 @@ const initialState: AppState = {
 };
 
 // API 기본 URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'localhost:8000';
 
 export const useWebSocket = () => {
-  // 앱 상태
-  const [state, setState] = useState<AppState>(initialState);
-  // 웹소켓 연결
-  const [socket, setSocket] = useState<Socket | null>(null);
-  // 연결 상태
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [state, setState] = useState<AppState>(initialState);  // 앱 상태
+  const [socket, setSocket] = useState<WebSocket | null>(null);  // 웹소켓 연결
+  const [isConnected, setIsConnected] = useState<boolean>(false);  // 연결 상태
 
   // 웹소켓 연결 설정
   useEffect(() => {
-    // 웹소켓 연결 생성
-    const socketInstance = io(`${API_BASE_URL}/ws`, {
-      transports: ['websocket'],
-      autoConnect: true
-    });
+    const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws`);
 
     // 연결 이벤트
-    socketInstance.on('connect', () => {
+    socketInstance.onopen = () => {
       console.log('웹소켓 연결됨');
       setIsConnected(true);
-    });
+    };
 
     // 연결 종료 이벤트
-    socketInstance.on('disconnect', () => {
+    socketInstance.onclose = () => {
       console.log('웹소켓 연결 종료');
       setIsConnected(false);
-    });
+    };
 
-    // 상태 업데이트 이벤트
-    socketInstance.on('state_update', (data: any) => {
-      console.log('상태 업데이트 수신:', data);
-      if (data && data.data) {
-        setState(data.data);
+    // 오류 이벤트
+    socketInstance.onerror = (error) => {
+      console.error('웹소켓 오류:', error);
+    };
+
+    // 메시지 수신 이벤트
+    socketInstance.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('상태 업데이트 수신:', data);
+        if (data && data.type === 'state_update' && data.data) {
+          setState(data.data);
+        }
+      } catch (e) {
+        console.error('메시지 파싱 오류:', e);
       }
-    });
+    };
 
     // 소켓 인스턴스 저장
     setSocket(socketInstance);
 
     // 정리 함수
     return () => {
-      socketInstance.disconnect();
+      socketInstance.close();
     };
   }, []);
 
-  // 트랙 추가
-  const addTrack = useCallback((track: Track) => {
-    if (socket) {
-      socket.emit('add_track', { type: 'add_track', track });
+  // 메시지 전송 헬퍼 함수
+  const sendMessage = useCallback((type: string, payload: any = {}) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({ type, ...payload });
+      socket.send(message);
     }
   }, [socket]);
+
+  // 트랙 추가
+  const addTrack = useCallback((track: Track) => {
+    sendMessage('add_track', { track });
+  }, [sendMessage]);
 
   // 재생 시작
   const playTrack = useCallback(() => {
-    if (socket) {
-      socket.emit('play', { type: 'play' });
-    }
-  }, [socket]);
+    sendMessage('play');
+  }, [sendMessage]);
 
   // 일시정지
   const pauseTrack = useCallback(() => {
-    if (socket) {
-      socket.emit('pause', { type: 'pause' });
-    }
-  }, [socket]);
+    sendMessage('pause');
+  }, [sendMessage]);
 
   // 재생 위치 변경
   const seekTrack = useCallback((position: number, trackIndex?: number) => {
-    if (socket) {
-      if (trackIndex !== undefined) {
-        socket.emit('seek', { type: 'seek', position, current_track: trackIndex });
-      } else {
-        socket.emit('seek', { type: 'seek', position });
-      }
+    if (trackIndex !== undefined) {
+      sendMessage('seek', { position, current_track: trackIndex });
+    } else {
+      sendMessage('seek', { position });
     }
-  }, [socket]);
+  }, [sendMessage]);
 
   // 다음 트랙
   const nextTrack = useCallback(() => {
-    if (socket) {
-      socket.emit('next_track', { type: 'next_track' });
-    }
-  }, [socket]);
+    sendMessage('next_track');
+  }, [sendMessage]);
 
   // 이전 트랙
   const prevTrack = useCallback(() => {
-    if (socket) {
-      socket.emit('prev_track', { type: 'prev_track' });
-    }
-  }, [socket]);
+    sendMessage('prev_track');
+  }, [sendMessage]);
 
   return {
     state,
@@ -130,4 +128,4 @@ export const useWebSocket = () => {
     nextTrack,
     prevTrack
   };
-}; 
+};

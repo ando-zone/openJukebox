@@ -13,7 +13,7 @@ interface Track {
 }
 
 interface SearchProps {
-  onAddTrack: (track: Track) => void;
+  onAddTrack: (track: Track) => void;  // 트랙 추가 함수
 }
 
 // API 기본 URL

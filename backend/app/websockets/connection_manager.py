@@ -62,9 +62,11 @@ class ConnectionManager:
         if track not in self.current_state["playlist"]:
             self.current_state["playlist"].append(track)
             
-            # 첫 번째 곡이 추가되는 경우 현재 트랙으로 설정
+            # 첫 번째 곡이 추가되는 경우 현재 트랙으로 설정하고 자동 재생
             if self.current_state["current_track"] is None and len(self.current_state["playlist"]) == 1:
                 self.current_state["current_track"] = 0
+                self.current_state["playing"] = True  # 자동 재생 시작
+                self.current_state["position"] = 0   # 재생 위치 초기화
             
             # 모든 클라이언트에 플레이리스트 변경 알림
             await self.broadcast(json.dumps({

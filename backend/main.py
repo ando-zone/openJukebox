@@ -2,8 +2,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import router as api_router
-from app.websockets import router as ws_router
+from .app.api import router as api_router
+from .app.websockets import router as ws_router
 
 app = FastAPI(title="OpenJukebox API")
 
@@ -25,4 +25,4 @@ async def root():
     return {"message": "OpenJukebox API에 오신 것을 환영합니다"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True) 

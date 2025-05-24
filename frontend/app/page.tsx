@@ -27,7 +27,7 @@ export default function Home() {
         <div className="lg:col-span-2">
           <Player 
             playlist={state.playlist}
-            currentTrack={state.currentTrack}
+            currentTrack={state.current_track}
             isPlaying={state.playing}
             position={state.position}
             onPlay={playTrack}
@@ -43,7 +43,7 @@ export default function Home() {
           <Search onAddTrack={addTrack} />
           <Playlist 
             tracks={state.playlist} 
-            currentTrack={state.currentTrack}
+            currentTrack={state.current_track}
             onSelectTrack={(index) => seekTrack(0, index)}
           />
         </div>
