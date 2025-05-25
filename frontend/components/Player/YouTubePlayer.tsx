@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Play, Pause, SkipBack, SkipForward, RotateCcw, RefreshCw } from 'lucide-react';
 import YouTube, { YouTubeEvent, YouTubePlayer as YTPlayer } from 'react-youtube';
 
 interface Track {
@@ -53,7 +54,7 @@ export default function YouTubePlayer({
   const lastPositionRef = useRef(0);
   const positionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // �� 서버 seek 타임스탬프 추적
+  // 🎯 서버 seek 타임스탬프 추적
   const serverSeekTimeRef = useRef(0);
   
   // 현재 재생할 비디오
@@ -185,7 +186,7 @@ export default function YouTubePlayer({
   // ===== YouTube 플레이어 설정 =====
   
   const opts = {
-    height: '390',
+    height: '100%',
     width: '100%',
     playerVars: {
       autoplay: 1,
@@ -246,57 +247,71 @@ export default function YouTubePlayer({
   // 컨트롤 버튼들
   const renderControls = () => {
     return (
-      <div className="flex justify-center space-x-4 mt-4">
-        <button 
-          onClick={onPrev}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-        >
-          이전
-        </button>
-        
-        {isPlaying ? (
-          <button 
-            onClick={onPause}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-          >
-            일시정지
-          </button>
-        ) : (
-          <button 
-            onClick={onPlay}
-            className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 text-white"
-          >
-            재생
-          </button>
+      <div className="mt-6">
+        {/* 현재 재생 중인 트랙 정보 */}
+        {currentVideo && (
+          <div className="mb-6 text-center">
+            <h3 className="text-xl font-semibold text-white mb-2 line-clamp-2">
+              {currentVideo.title}
+            </h3>
+            <p className="text-gray-400 text-sm">{currentVideo.channel}</p>
+          </div>
         )}
-        
-        <button 
-          onClick={onNext}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-        >
-          다음
-        </button>
-        
-        {/* 🎯 수동 위치 동기화 버튼 */}
-        <button 
-          onClick={handleManualSeek}
-          className="px-4 py-2 bg-green-500 rounded hover:bg-green-600 text-white"
-          title="현재 위치를 모든 사용자에게 동기화"
-        >
-          위치 동기화
-        </button>
-        
-        {/* 🎯 위치 요청 버튼 (새 사용자용) */}
-        <button 
-          onClick={() => {
-            console.log('📍 다른 사용자의 현재 위치 요청');
-            onSeek(-1);
-          }}
-          className="px-4 py-2 bg-purple-500 rounded hover:bg-purple-600 text-white"
-          title="다른 사용자의 현재 위치로 동기화"
-        >
-          위치 요청
-        </button>
+
+        {/* 컨트롤 버튼들 */}
+        <div className="flex items-center justify-center gap-4">
+          <button 
+            onClick={onPrev}
+            className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
+            title="이전 곡"
+          >
+            <SkipBack className="w-5 h-5 text-white" />
+          </button>
+          
+          <button 
+            onClick={isPlaying ? onPause : onPlay}
+            className="p-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-full transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
+            title={isPlaying ? "일시정지" : "재생"}
+          >
+            {isPlaying ? (
+              <Pause className="w-6 h-6 text-white" />
+            ) : (
+              <Play className="w-6 h-6 text-white ml-0.5" />
+            )}
+          </button>
+          
+          <button 
+            onClick={onNext}
+            className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
+            title="다음 곡"
+          >
+            <SkipForward className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        {/* 동기화 버튼들 */}
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <button 
+            onClick={handleManualSeek}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-green-500/30 text-green-400 hover:text-green-300"
+            title="현재 위치를 모든 사용자에게 동기화"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span className="text-sm font-medium">위치 동기화</span>
+          </button>
+          
+          <button 
+            onClick={() => {
+              console.log('📍 다른 사용자의 현재 위치 요청');
+              onSeek(-1);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-purple-500/30 text-purple-400 hover:text-purple-300"
+            title="다른 사용자의 현재 위치로 동기화"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="text-sm font-medium">위치 요청</span>
+          </button>
+        </div>
       </div>
     );
   };
@@ -304,9 +319,13 @@ export default function YouTubePlayer({
   // 빈 플레이리스트 처리
   if (!currentVideo) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="h-[390px] bg-gray-100 flex items-center justify-center">
-          <p className="text-gray-500">재생할 트랙을 추가해주세요</p>
+      <div className="card glass hover-lift">
+        <div className="w-full aspect-video rounded-xl bg-gradient-to-br from-gray-800/50 to-gray-900/50 flex flex-col items-center justify-center text-center mb-6">
+          <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-full flex items-center justify-center mb-6">
+            <Play className="w-12 h-12 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-white mb-2">재생할 트랙이 없습니다</h3>
+          <p className="text-gray-400 mb-6">검색을 통해 좋아하는 음악을 추가해보세요</p>
         </div>
         {renderControls()}
       </div>
@@ -314,17 +333,18 @@ export default function YouTubePlayer({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold mb-4">{currentVideo.title}</h2>
+    <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+      {/* YouTube 플레이어 */}
+      <div className="relative w-full bg-black rounded-xl overflow-hidden mb-6" style={{ aspectRatio: '16/9' }}>
+        <YouTube
+          videoId={currentVideo.id}
+          opts={opts}
+          onReady={handleReady}
+          onStateChange={handleStateChange}
+          className="w-full h-full"
+        />
+      </div>
       
-      <YouTube
-        videoId={currentVideo.id}
-        opts={opts}
-        onReady={handleReady}
-        onStateChange={handleStateChange}
-      />
-      
-      <p className="text-sm text-gray-500 mt-2">{currentVideo.channel}</p>
       {renderControls()}
     </div>
   );
