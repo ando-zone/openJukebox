@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Room } from '@/types/room';
 
 // 상태와 트랙 타입 정의
 interface Track {
@@ -26,7 +27,77 @@ const initialState: AppState = {
 // API 기본 URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'localhost:8000';
 
-export const useWebSocket = () => {
+export const useRooms = () => {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 룸 목록 가져오기
+  const fetchRooms = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`http://${API_BASE_URL}/rooms`);
+      
+      if (!response.ok) {
+        throw new Error('룸 목록을 가져오는데 실패했습니다.');
+      }
+      
+      const data = await response.json();
+      setRooms(data);
+      setError(null);
+    } catch (err) {
+      console.error('룸 목록 조회 에러:', err);
+      setError('룸 목록을 가져오는데 실패했습니다.');
+      // 개발 편의를 위한 임시 데이터
+      setRooms([
+        { id: '1', name: '편안한 음악방', description: '차분한 음악을 즐겨요', createdAt: new Date().toISOString(), participants: 5 },
+        { id: '2', name: '신나는 파티룸', description: '에너지 넘치는 음악!', createdAt: new Date().toISOString(), participants: 12 },
+        { id: '3', name: '클래식 감상', description: '고전 음악 감상실', createdAt: new Date().toISOString(), participants: 3 },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 룸 생성하기
+  const createRoom = useCallback(async (roomData: { name: string; description?: string }) => {
+    try {
+      const response = await fetch(`http://${API_BASE_URL}/rooms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(roomData),
+      });
+      
+      if (!response.ok) {
+        throw new Error('룸 생성에 실패했습니다.');
+      }
+      
+      const newRoom = await response.json();
+      setRooms(prev => [...prev, newRoom]);
+      return newRoom;
+    } catch (err) {
+      console.error('룸 생성 에러:', err);
+      throw err;
+    }
+  }, []);
+
+  // 컴포넌트 마운트 시 룸 목록 가져오기
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  return {
+    rooms,
+    loading,
+    error,
+    fetchRooms,
+    createRoom
+  };
+};
+
+export const useWebSocket = (roomId?: string) => {
   const [state, setState] = useState<AppState>(initialState);  // 앱 상태
   const [socket, setSocket] = useState<WebSocket | null>(null);  // 웹소켓 연결
   const [isConnected, setIsConnected] = useState<boolean>(false);  // 연결 상태
@@ -37,7 +108,10 @@ export const useWebSocket = () => {
 
   // 웹소켓 연결 설정
   useEffect(() => {
-    const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws`);
+    if (!roomId) return; // 룸 ID가 없으면 연결하지 않음
+    
+    // 룸 ID를 포함한 WebSocket URL
+    const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws${roomId ? `?room_id=${roomId}` : ''}`);
 
     // 연결 이벤트
     socketInstance.onopen = () => {
@@ -86,7 +160,7 @@ export const useWebSocket = () => {
     return () => {
       socketInstance.close();
     };
-  }, []); // 🎯 의존성 배열에서 콜백들 제거
+  }, [roomId]); // 룸 ID가 변경될 때마다 다시 연결
 
   // 메시지 전송 헬퍼 함수
   const sendMessage = useCallback((type: string, payload: any = {}) => {
@@ -149,7 +223,7 @@ export const useWebSocket = () => {
     seekTrack,
     nextTrack,
     prevTrack,
-    setOnSeek,  // 새로운 함수 추가
-    setOnPositionRequest  // 새로운 함수 추가
+    setOnSeek,
+    setOnPositionRequest
   };
 };

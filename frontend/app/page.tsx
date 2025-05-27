@@ -1,24 +1,39 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Music, Users, Headphones } from 'lucide-react'
-import Search from '@/components/Search/SearchBar'
-import Player from '@/components/Player/YouTubePlayer'
-import Playlist from '@/components/Playlist/PlaylistView'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useRooms } from '@/hooks/useWebSocket'
+import RoomList from '@/components/Room/RoomList'
+import CreateRoomModal from '@/components/Room/CreateRoomModal'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const router = useRouter();
+  
   const {
-    state,
-    addTrack,
-    playTrack,
-    pauseTrack,
-    seekTrack,
-    nextTrack,
-    prevTrack,
-    setOnSeek,
-    setOnPositionRequest
-  } = useWebSocket();
+    rooms,
+    loading,
+    error,
+    createRoom,
+  } = useRooms();
+
+  const handleCreateRoom = async (data: { name: string; description?: string }) => {
+    try {
+      setIsCreating(true);
+      const newRoom = await createRoom(data);
+      setCreateModalOpen(false);
+      router.push(`/room/${newRoom.id}`);
+    } catch (err) {
+      console.error('방 생성 에러:', err);
+      // 개발 편의를 위한 임시 로직 - 실제로는 오류 처리 필요
+      setCreateModalOpen(false);
+      router.push(`/room/1`);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -69,47 +84,15 @@ export default function Home() {
           <p className="text-lg md:text-xl text-gray-300 mb-8 max-w-md mx-auto">
             모두가 함께하는 음악 경험
           </p>
-          
-          {/* 상태 표시 */}
-          <div className="flex items-center justify-center gap-6 flex-wrap">
-            <div className="badge">
-              <Users className="w-4 h-4" style={{ color: '#4ade80' }} />
-              <span>연결됨</span>
-            </div>
-            <div className="badge">
-              <Headphones className="w-4 h-4" style={{ color: '#3b82f6' }} />
-              <span>{state.playlist.length}곡 대기중</span>
-            </div>
-          </div>
         </header>
 
         {/* 메인 콘텐츠 */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* 플레이어 섹션 */}
-          <div className="xl:col-span-2">
-            <Player 
-              playlist={state.playlist}
-              currentTrack={state.current_track}
-              isPlaying={state.playing}
-              onPlay={playTrack}
-              onPause={pauseTrack}
-              onSeek={seekTrack}
-              onNext={nextTrack}
-              onPrev={prevTrack}
-              setOnSeek={setOnSeek}
-              setOnPositionRequest={setOnPositionRequest}
-            />
-          </div>
-          
-          {/* 사이드바 */}
-          <div className="xl:col-span-1 space-y-6">
-            <Search onAddTrack={addTrack} />
-            <Playlist 
-              tracks={state.playlist} 
-              currentTrack={state.current_track}
-              onSelectTrack={(index) => seekTrack(0, index)}
-            />
-          </div>
+        <div className="max-w-5xl mx-auto">
+          <RoomList 
+            rooms={rooms} 
+            loading={loading} 
+            onCreateRoom={() => setCreateModalOpen(true)} 
+          />
         </div>
 
         {/* 푸터 */}
@@ -119,6 +102,14 @@ export default function Home() {
           </p>
         </footer>
       </div>
+
+      {/* 방 생성 모달 */}
+      <CreateRoomModal 
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreateRoom={handleCreateRoom}
+        loading={isCreating}
+      />
     </div>
   )
 } 
