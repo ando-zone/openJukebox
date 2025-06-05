@@ -36,7 +36,7 @@ export const useRooms = () => {
   const fetchRooms = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://${API_BASE_URL}/rooms`);
+      const response = await fetch(`http://${API_BASE_URL}/api/rooms/`);
       
       if (!response.ok) {
         throw new Error('룸 목록을 가져오는데 실패했습니다.');
@@ -62,7 +62,7 @@ export const useRooms = () => {
   // 룸 생성하기
   const createRoom = useCallback(async (roomData: { name: string; description?: string }) => {
     try {
-      const response = await fetch(`http://${API_BASE_URL}/rooms`, {
+      const response = await fetch(`http://${API_BASE_URL}/api/rooms/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
