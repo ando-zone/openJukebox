@@ -28,55 +28,40 @@ async def websocket_endpoint(
             data = await websocket.receive_text()
             message = json.loads(data)
             
-            # 메시지 타입에 따라 처리
+            # 메시지 타입에 따라 마스터 클라이언트를 통해 처리
             if message["type"] == "play":
                 # 재생 명령
-                await manager.update_room_state({"playing": True}, current_room_id)
+                await manager.handle_play(current_room_id)
             
             elif message["type"] == "pause":
                 # 일시정지 명령
-                await manager.update_room_state({"playing": False}, current_room_id)
+                await manager.handle_pause(current_room_id)
             
             elif message["type"] == "seek":
-                # 재생 위치 변경 명령 - 단순 브로드캐스트만
+                # 재생 위치 변경 명령
                 if "position" in message:
-                    # position을 서버에 저장하지 않고 바로 모든 클라이언트에 브로드캐스트
-                    await manager.broadcast_seek_to_room(message["position"], current_room_id)
+                    await manager.handle_seek(current_room_id, float(message["position"]))
                 
                 if "current_track" in message:
                     # 트랙 변경 처리
-                    await manager.update_room_state({
-                        "current_track": message["current_track"]
-                    }, current_room_id)
+                    await manager.handle_track_change(current_room_id, message["current_track"])
             
             elif message["type"] == "add_track":
                 # 트랙 추가 명령
                 if "track" in message:
-                    await manager.add_to_room_playlist(message["track"], current_room_id)
+                    await manager.handle_add_track(current_room_id, message["track"])
             
             elif message["type"] == "next_track":
                 # 다음 트랙으로 이동
-                room_state = manager.room_states.get(current_room_id, {})
-                current = room_state.get("current_track")
-                playlist_length = len(room_state.get("playlist", []))
-                
-                if current is not None and playlist_length > 0:
-                    next_track = (current + 1) % playlist_length
-                    await manager.update_room_state({
-                        "current_track": next_track
-                    }, current_room_id)
+                await manager.handle_next_track(current_room_id)
             
             elif message["type"] == "prev_track":
                 # 이전 트랙으로 이동
-                room_state = manager.room_states.get(current_room_id, {})
-                current = room_state.get("current_track")
-                playlist_length = len(room_state.get("playlist", []))
-                
-                if current is not None and playlist_length > 0:
-                    prev_track = (current - 1) % playlist_length
-                    await manager.update_room_state({
-                        "current_track": prev_track
-                    }, current_room_id)
+                await manager.handle_prev_track(current_room_id)
+            
+            elif message["type"] == "sync_request":
+                # 클라이언트가 동기화 요청 - 마스터 클라이언트가 자동으로 처리하므로 무시
+                pass
     
     except WebSocketDisconnect:
         # 클라이언트 연결 종료

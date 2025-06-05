@@ -22,6 +22,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const {
     state,
     isConnected,
+    lastSyncTime,
     addTrack,
     playTrack,
     pauseTrack,
@@ -29,7 +30,8 @@ export default function RoomPage({ params }: RoomPageProps) {
     nextTrack,
     prevTrack,
     setOnSeek,
-    setOnPositionRequest
+    setOnSyncUpdate,
+    getCurrentPosition
   } = useWebSocket(roomId);
 
   // 연결 상태 확인
@@ -69,13 +71,18 @@ export default function RoomPage({ params }: RoomPageProps) {
             
             <div className="flex items-center gap-6 flex-wrap">
               <div className="badge">
-                <Users className="w-4 h-4" style={{ color: '#4ade80' }} />
-                <span>연결됨</span>
+                <Users className="w-4 h-4" style={{ color: isConnected ? '#4ade80' : '#ef4444' }} />
+                <span>{isConnected ? '연결됨' : '연결 끊김'}</span>
               </div>
               <div className="badge">
                 <Headphones className="w-4 h-4" style={{ color: '#3b82f6' }} />
                 <span>{state.playlist.length}곡 대기중</span>
               </div>
+              {lastSyncTime > 0 && (
+                <div className="badge">
+                  <span className="text-xs">마스터 동기화 활성</span>
+                </div>
+              )}
             </div>
           </div>
           
@@ -102,7 +109,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 Room #{roomId}
               </h1>
               <p className="text-gray-300">
-                함께 음악을 즐기는 공간
+                함께 음악을 즐기는 공간 (마스터 클라이언트 동기화)
               </p>
             </div>
           </div>
@@ -116,13 +123,16 @@ export default function RoomPage({ params }: RoomPageProps) {
               playlist={state.playlist}
               currentTrack={state.current_track}
               isPlaying={state.playing}
+              position={state.position}
+              lastUpdateTime={state.last_update_time}
               onPlay={playTrack}
               onPause={pauseTrack}
               onSeek={seekTrack}
               onNext={nextTrack}
               onPrev={prevTrack}
               setOnSeek={setOnSeek}
-              setOnPositionRequest={setOnPositionRequest}
+              setOnSyncUpdate={setOnSyncUpdate}
+              getCurrentPosition={getCurrentPosition}
             />
           </div>
           

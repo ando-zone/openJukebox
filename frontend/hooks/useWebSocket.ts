@@ -15,13 +15,18 @@ interface AppState {
   playlist: Track[];
   current_track: number | null;
   playing: boolean;
+  position?: number;  // 마스터 클라이언트로부터 받는 정확한 위치
+  last_update_time?: number;  // 마지막 업데이트 시간
+  volume?: number;
 }
 
-// 초기 상태 (position 제거)
+// 초기 상태
 const initialState: AppState = {
   playlist: [],
   current_track: null,
-  playing: false
+  playing: false,
+  position: 0,
+  volume: 1.0
 };
 
 // API 기본 URL
@@ -101,10 +106,11 @@ export const useWebSocket = (roomId?: string) => {
   const [state, setState] = useState<AppState>(initialState);  // 앱 상태
   const [socket, setSocket] = useState<WebSocket | null>(null);  // 웹소켓 연결
   const [isConnected, setIsConnected] = useState<boolean>(false);  // 연결 상태
+  const [lastSyncTime, setLastSyncTime] = useState<number>(0);  // 마지막 동기화 시간
   
-  // 🎯 useRef로 최신 콜백 참조 (무한루프 방지)
+  // 콜백 참조 (무한루프 방지)
   const onSeekCallbackRef = useRef<((position: number) => void) | null>(null);
-  const onPositionRequestCallbackRef = useRef<(() => void) | null>(null);
+  const onSyncUpdateCallbackRef = useRef<((state: AppState) => void) | null>(null);
 
   // 웹소켓 연결 설정
   useEffect(() => {
@@ -115,7 +121,7 @@ export const useWebSocket = (roomId?: string) => {
 
     // 연결 이벤트
     socketInstance.onopen = () => {
-      console.log('웹소켓 연결됨');
+      console.log(`웹소켓 연결됨 (방: ${roomId})`);
       setIsConnected(true);
     };
 
@@ -136,16 +142,23 @@ export const useWebSocket = (roomId?: string) => {
         const data = JSON.parse(event.data);
         
         if (data.type === 'state_update' && data.data) {
+          // 기본 상태 업데이트 (연결 시 또는 수동 업데이트)
           setState(data.data);
+          setLastSyncTime(Date.now());
+        } else if (data.type === 'master_sync' && data.data) {
+          // 마스터 클라이언트로부터의 동기화 업데이트
+          const masterState = data.data;
+          setState(masterState);
+          setLastSyncTime(data.timestamp || Date.now());
+          
+          // 동기화 콜백 호출 (위치 업데이트 등을 위해)
+          if (onSyncUpdateCallbackRef.current) {
+            onSyncUpdateCallbackRef.current(masterState);
+          }
         } else if (data.type === 'seek_update' && data.data) {
-          // 🎯 seek 이벤트 처리 - 콜백 호출
+          // 개별 seek 이벤트 처리 (하위 호환성)
           if (onSeekCallbackRef.current && data.data.position !== undefined) {
             onSeekCallbackRef.current(data.data.position);
-          }
-        } else if (data.type === 'position_request') {
-          // 🎯 위치 요청 처리 - 현재 위치 공유
-          if (onPositionRequestCallbackRef.current) {
-            onPositionRequestCallbackRef.current();
           }
         }
       } catch (e) {
@@ -204,26 +217,45 @@ export const useWebSocket = (roomId?: string) => {
     sendMessage('prev_track');
   }, [sendMessage]);
 
-  // 🎯 seek 콜백 등록 함수
+  // 동기화 요청 (필요시)
+  const requestSync = useCallback(() => {
+    sendMessage('sync_request');
+  }, [sendMessage]);
+
+  // seek 콜백 등록 함수 (하위 호환성)
   const setOnSeek = useCallback((callback: (position: number) => void) => {
     onSeekCallbackRef.current = callback;
   }, []);
 
-  // 🎯 위치 요청 콜백 등록 함수
-  const setOnPositionRequest = useCallback((callback: () => void) => {
-    onPositionRequestCallbackRef.current = callback;
+  // 동기화 업데이트 콜백 등록 함수 (마스터 클라이언트 동기화용)
+  const setOnSyncUpdate = useCallback((callback: (state: AppState) => void) => {
+    onSyncUpdateCallbackRef.current = callback;
   }, []);
+
+  // 현재 위치 계산 (클라이언트 사이드에서 실시간 계산)
+  const getCurrentPosition = useCallback(() => {
+    if (!state.playing || !state.position || !state.last_update_time) {
+      return state.position || 0;
+    }
+    
+    const now = Date.now() / 1000; // 초 단위로 변환
+    const elapsed = now - state.last_update_time;
+    return (state.position || 0) + elapsed;
+  }, [state.playing, state.position, state.last_update_time]);
 
   return {
     state,
     isConnected,
+    lastSyncTime,
     addTrack,
     playTrack,
     pauseTrack,
     seekTrack,
     nextTrack,
     prevTrack,
+    requestSync,
     setOnSeek,
-    setOnPositionRequest
+    setOnSyncUpdate,
+    getCurrentPosition
   };
 };

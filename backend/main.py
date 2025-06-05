@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import router as api_router
-from backend.app.websockets import router as ws_router
+from backend.app.websockets import router as ws_router, master_client_manager
 from backend.app.init_db import init_db, close_db
 
 app = FastAPI(title="OpenJukebox API")
@@ -30,9 +30,12 @@ async def root():
 async def startup_db_client():
     await init_db()
 
-# 종료 이벤트 - 데이터베이스 연결 종료
+# 종료 이벤트 - 데이터베이스 연결 종료 및 마스터 클라이언트 정리
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    # 마스터 클라이언트들 모두 종료
+    await master_client_manager.shutdown_all()
+    # 데이터베이스 연결 종료
     await close_db()
 
 if __name__ == "__main__":
