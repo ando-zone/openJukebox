@@ -5,7 +5,7 @@ import { Music, Users, Headphones, ArrowLeft } from 'lucide-react'
 import Search from '@/components/Search/SearchBar'
 import Player from '@/components/Player/YouTubePlayer'
 import Playlist from '@/components/Playlist/PlaylistView'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket, useRoomInfo } from '@/hooks/useWebSocket'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -18,6 +18,9 @@ interface RoomPageProps {
 export default function RoomPage({ params }: RoomPageProps) {
   const router = useRouter();
   const roomId = params.id;
+  
+  // 방 정보 가져오기
+  const { roomInfo, loading: roomLoading, error: roomError } = useRoomInfo(roomId);
   
   const {
     state,
@@ -105,10 +108,16 @@ export default function RoomPage({ params }: RoomPageProps) {
             </div>
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-white">
-                Room #{roomId}
+                {roomLoading ? (
+                  <span className="animate-pulse">로딩 중...</span>
+                ) : roomInfo?.name ? (
+                  roomInfo.name
+                ) : (
+                  `Room #${roomId}`
+                )}
               </h1>
               <p className="text-gray-300">
-                함께 음악을 즐기는 공간 (마스터 클라이언트 동기화)
+                {roomInfo?.description || '함께 음악을 즐기는 공간 (마스터 클라이언트 동기화)'}
               </p>
             </div>
           </div>

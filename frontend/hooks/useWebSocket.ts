@@ -11,6 +11,14 @@ interface Track {
   publishedAt: string;
 }
 
+interface RoomInfo {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  participants: number;
+}
+
 interface AppState {
   playlist: Track[];
   current_track: number | null;
@@ -18,6 +26,7 @@ interface AppState {
   position?: number;  // 마스터 클라이언트로부터 받는 정확한 위치
   last_update_time?: number;  // 마지막 업데이트 시간
   volume?: number;
+  room_info?: RoomInfo;  // 방 정보 추가
 }
 
 // 초기 상태
@@ -99,6 +108,54 @@ export const useRooms = () => {
     error,
     fetchRooms,
     createRoom
+  };
+};
+
+// 개별 방 정보 가져오기 hook
+export const useRoomInfo = (roomId: string) => {
+  const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRoomInfo = useCallback(async () => {
+    if (!roomId) return;
+    
+    try {
+      setLoading(true);
+      const response = await fetch(`http://${API_BASE_URL}/api/rooms/${roomId}`);
+      
+      if (!response.ok) {
+        throw new Error('방 정보를 가져오는데 실패했습니다.');
+      }
+      
+      const data = await response.json();
+      setRoomInfo(data);
+      setError(null);
+    } catch (err) {
+      console.error('방 정보 조회 에러:', err);
+      setError('방 정보를 가져오는데 실패했습니다.');
+      // 개발 편의를 위한 임시 데이터
+      setRoomInfo({
+        id: roomId,
+        name: `Room #${roomId}`,
+        description: '음악을 함께 즐기는 공간',
+        createdAt: new Date().toISOString(),
+        participants: 1
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    fetchRoomInfo();
+  }, [fetchRoomInfo]);
+
+  return {
+    roomInfo,
+    loading,
+    error,
+    refetch: fetchRoomInfo
   };
 };
 
