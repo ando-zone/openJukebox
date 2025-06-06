@@ -70,6 +70,9 @@ export default function YouTubePlayer({
   // YouTube seek으로 인한 일시정지 추적
   const seekPauseTimeRef = useRef(0);
   
+  // 초기 로딩 중인지 추적 (자동 재생 방지용)
+  const isInitialLoadingRef = useRef(true);
+  
   // 현재 재생할 비디오
   const currentVideo = currentTrack !== null && playlist.length > 0 
     ? playlist[currentTrack] 
@@ -142,7 +145,7 @@ export default function YouTubePlayer({
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: 1,
+      autoplay: 0,        // 자동 재생 비활성화 (새 사용자 입장 시 자동 재생 방지)
       mute: 0,
       controls: 1,        // YouTube 자체 컨트롤 사용 (시간 표시 포함)
       rel: 0,
@@ -162,16 +165,40 @@ export default function YouTubePlayer({
     console.log('🎬 YouTube 플레이어 준비 완료');
     playerRef.current = event.target;
     setIsPlayerReady(true);
+    
+    // 초기 로딩 완료 후 잠시 대기한 다음 플래그 해제
+    setTimeout(() => {
+      isInitialLoadingRef.current = false;
+      
+      // 마스터 상태에 따라 플레이어 동기화
+      if (isPlaying && playerRef.current) {
+        try {
+          const player = playerRef.current;
+          if (typeof player.playVideo === 'function') {
+            player.playVideo();
+          }
+        } catch (error) {
+          console.error('초기 재생 동기화 오류:', error);
+        }
+      }
+    }, 1000); // 1초 후 초기 로딩 플래그 해제
   };
   
   const handleStateChange = (event: YouTubeEvent) => {
     const playerState = event.data;
     const now = Date.now();
     
+    // 초기 로딩 중에는 상태 변경 무시 (자동 재생 방지)
+    if (isInitialLoadingRef.current) {
+      console.log('🔄 초기 로딩 중 - 상태 변경 무시:', playerState);
+      return;
+    }
+    
     // YouTube 플레이어 상태: 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
     
     if (playerState === 1 && !isPlaying) {
       // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
+      console.log('▶️ YouTube 플레이어에서 재생 감지');
       onPlay();
     } else if (playerState === 2 && isPlaying) {
       // 일시정지 감지 - seek으로 인한 것인지 확인
@@ -179,11 +206,13 @@ export default function YouTubePlayer({
       
       if (!isSeekPause) {
         // 실제 사용자 일시정지
+        console.log('⏸️ YouTube 플레이어에서 일시정지 감지');
         onPause();
       }
       // seek으로 인한 일시정지는 무시 (자동으로 재생 복원됨)
     } else if (playerState === 0) {
       // 동영상 종료
+      console.log('⏭️ 동영상 종료 - 다음 트랙으로');
       onNext();
     }
     

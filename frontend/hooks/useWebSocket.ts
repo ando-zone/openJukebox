@@ -219,6 +219,15 @@ export const useWebSocket = (roomId?: string) => {
         if (data.type === 'master_sync' && data.data) {
           // 마스터 클라이언트로부터의 동기화 업데이트 (유일한 동기화 방식)
           const masterState = data.data;
+          
+          // 디버깅: 받은 상태 로깅
+          console.log('🔄 마스터 동기화 받음:', {
+            playing: masterState.playing,
+            position: masterState.position,
+            current_track: masterState.current_track,
+            timestamp: data.timestamp
+          });
+          
           setState(masterState);
           setLastSyncTime(data.timestamp || Date.now());
           
@@ -267,11 +276,13 @@ export const useWebSocket = (roomId?: string) => {
 
   // 재생 시작
   const playTrack = useCallback(() => {
+    console.log('▶️ 사용자가 재생 버튼 클릭');
     sendMessage('play');
   }, [sendMessage]);
 
   // 일시정지
   const pauseTrack = useCallback(() => {
+    console.log('⏸️ 사용자가 일시정지 버튼 클릭');
     sendMessage('pause');
   }, [sendMessage]);
 
