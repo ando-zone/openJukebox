@@ -258,17 +258,21 @@ export default function YouTubePlayer({
 
   // 현재 위치 가져오기 (마스터 클라이언트 기준)
   const getCurrentMasterPosition = () => {
-    const masterPosition = getCurrentPosition();
-    console.log(`📍 마스터 클라이언트 현재 위치: ${masterPosition.toFixed(1)}초`);
+    if (!position || position <= 0) {
+      console.log('📍 서버 위치가 없어서 동기화 불가');
+      return;
+    }
     
-    if (playerRef.current && masterPosition > 0) {
+    console.log(`📍 서버 위치로 동기화: ${position.toFixed(1)}초`);
+    
+    if (playerRef.current) {
       try {
         serverSeekTimeRef.current = Date.now();
-        lastPositionRef.current = Math.floor(masterPosition);
-        playerRef.current.seekTo(masterPosition, true);
-        console.log(`🔄 마스터 위치로 동기화: ${masterPosition.toFixed(1)}초`);
+        lastPositionRef.current = Math.floor(position);
+        playerRef.current.seekTo(position, true);
+        console.log(`🔄 서버 위치로 동기화 완료: ${position.toFixed(1)}초`);
       } catch (error) {
-        console.error('마스터 위치 동기화 오류:', error);
+        console.error('서버 위치 동기화 오류:', error);
       }
     }
   };
@@ -286,7 +290,8 @@ export default function YouTubePlayer({
             <p className="text-gray-400 text-sm">{currentVideo.channel}</p>
             {position !== undefined && lastUpdateTime && (
               <p className="text-green-400 text-xs mt-1">
-                마스터 위치: {position.toFixed(1)}초 (실시간: {getCurrentPosition().toFixed(1)}초)
+                서버 위치: {position.toFixed(1)}초 | 
+                실제 플레이어: {playerRef.current ? playerRef.current.getCurrentTime().toFixed(1) : '0.0'}초
               </p>
             )}
           </div>
@@ -337,10 +342,10 @@ export default function YouTubePlayer({
           <button 
             onClick={getCurrentMasterPosition}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-purple-500/30 text-purple-400 hover:text-purple-300"
-            title="마스터 클라이언트 위치로 동기화"
+            title="서버 위치로 내 플레이어 동기화"
           >
             <RotateCcw className="w-4 h-4" />
-            <span className="text-sm font-medium">마스터 동기화</span>
+            <span className="text-sm font-medium">서버 동기화</span>
           </button>
         </div>
       </div>
