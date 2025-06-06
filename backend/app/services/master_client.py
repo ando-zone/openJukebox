@@ -88,7 +88,12 @@ class MasterClient:
         try:
             while self.is_active:
                 await self._broadcast_state_update()
-                await asyncio.sleep(1.0)  # 1초마다 동기화
+                
+                # 재생 중이면 1초마다, 일시정지 중이면 10초마다 동기화
+                if self.playback_state.is_playing:
+                    await asyncio.sleep(1.0)  # 재생 중: 1초마다
+                else:
+                    await asyncio.sleep(10.0)  # 일시정지: 10초마다
         except asyncio.CancelledError:
             pass
         except Exception as e:

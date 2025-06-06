@@ -111,24 +111,63 @@ export const useWebSocket = (roomId?: string) => {
   // 콜백 참조 (무한루프 방지)
   const onSeekCallbackRef = useRef<((position: number) => void) | null>(null);
   const onSyncUpdateCallbackRef = useRef<((state: AppState) => void) | null>(null);
+  
+  // 재연결 관련 상태
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
 
-  // 웹소켓 연결 설정
-  useEffect(() => {
-    if (!roomId) return; // 룸 ID가 없으면 연결하지 않음
+  // 웹소켓 연결 함수 (의존성 최소화)
+  const connectWebSocket = useCallback(() => {
+    if (!roomId) return;
+    
+    console.log(`웹소켓 연결 시도... (방: ${roomId})`);
     
     // 룸 ID를 포함한 WebSocket URL
     const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws${roomId ? `?room_id=${roomId}` : ''}`);
+
+    // 하트비트 전송 함수 (로컬 함수로 정의)
+    const sendHeartbeat = () => {
+      if (socketInstance && socketInstance.readyState === WebSocket.OPEN) {
+        socketInstance.send(JSON.stringify({ type: 'ping' }));
+      }
+    };
 
     // 연결 이벤트
     socketInstance.onopen = () => {
       console.log(`웹소켓 연결됨 (방: ${roomId})`);
       setIsConnected(true);
+      reconnectAttemptsRef.current = 0; // 재연결 시도 횟수 리셋
+      
+      // 하트비트 시작 (30초마다)
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+      heartbeatIntervalRef.current = setInterval(sendHeartbeat, 30000);
     };
 
     // 연결 종료 이벤트
-    socketInstance.onclose = () => {
-      console.log('웹소켓 연결 종료');
+    socketInstance.onclose = (event) => {
+      console.log('웹소켓 연결 종료', event.code, event.reason);
       setIsConnected(false);
+      
+      // 하트비트 정리
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      
+      // 자동 재연결 시도 (정상 종료가 아닌 경우)
+      if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000); // 지수 백오프
+        console.log(`${delay}ms 후 재연결 시도... (${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`);
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectAttemptsRef.current++;
+          connectWebSocket();
+        }, delay);
+      }
     };
 
     // 오류 이벤트
@@ -140,6 +179,12 @@ export const useWebSocket = (roomId?: string) => {
     socketInstance.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        
+        // Pong 응답 처리
+        if (data.type === 'pong') {
+          console.log('하트비트 응답 수신');
+          return;
+        }
         
         if (data.type === 'state_update' && data.data) {
           // 기본 상태 업데이트 (연결 시 또는 수동 업데이트)
@@ -168,12 +213,25 @@ export const useWebSocket = (roomId?: string) => {
 
     // 소켓 인스턴스 저장
     setSocket(socketInstance);
+  }, [roomId]); // roomId만 의존성으로 설정
 
+  // 웹소켓 연결 설정
+  useEffect(() => {
+    connectWebSocket();
+    
     // 정리 함수
     return () => {
-      socketInstance.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+      if (socket) {
+        socket.close(1000); // 정상 종료
+      }
     };
-  }, [roomId]); // 룸 ID가 변경될 때마다 다시 연결
+  }, [connectWebSocket]); // connectWebSocket이 변경될 때마다 다시 연결
 
   // 메시지 전송 헬퍼 함수
   const sendMessage = useCallback((type: string, payload: any = {}) => {
