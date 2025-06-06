@@ -109,7 +109,6 @@ export const useWebSocket = (roomId?: string) => {
   const [lastSyncTime, setLastSyncTime] = useState<number>(0);  // 마지막 동기화 시간
   
   // 콜백 참조 (무한루프 방지)
-  const onSeekCallbackRef = useRef<((position: number) => void) | null>(null);
   const onSyncUpdateCallbackRef = useRef<((state: AppState) => void) | null>(null);
   
   // 재연결 관련 상태
@@ -182,16 +181,11 @@ export const useWebSocket = (roomId?: string) => {
         
         // Pong 응답 처리
         if (data.type === 'pong') {
-          console.log('하트비트 응답 수신');
           return;
         }
         
-        if (data.type === 'state_update' && data.data) {
-          // 기본 상태 업데이트 (연결 시 또는 수동 업데이트)
-          setState(data.data);
-          setLastSyncTime(Date.now());
-        } else if (data.type === 'master_sync' && data.data) {
-          // 마스터 클라이언트로부터의 동기화 업데이트
+        if (data.type === 'master_sync' && data.data) {
+          // 마스터 클라이언트로부터의 동기화 업데이트 (유일한 동기화 방식)
           const masterState = data.data;
           setState(masterState);
           setLastSyncTime(data.timestamp || Date.now());
@@ -200,12 +194,8 @@ export const useWebSocket = (roomId?: string) => {
           if (onSyncUpdateCallbackRef.current) {
             onSyncUpdateCallbackRef.current(masterState);
           }
-        } else if (data.type === 'seek_update' && data.data) {
-          // 개별 seek 이벤트 처리 (하위 호환성)
-          if (onSeekCallbackRef.current && data.data.position !== undefined) {
-            onSeekCallbackRef.current(data.data.position);
-          }
         }
+        // 이전 방식들은 모두 제거 - 마스터 클라이언트만 사용
       } catch (e) {
         console.error('메시지 파싱 오류:', e);
       }
@@ -280,11 +270,6 @@ export const useWebSocket = (roomId?: string) => {
     sendMessage('sync_request');
   }, [sendMessage]);
 
-  // seek 콜백 등록 함수 (하위 호환성)
-  const setOnSeek = useCallback((callback: (position: number) => void) => {
-    onSeekCallbackRef.current = callback;
-  }, []);
-
   // 동기화 업데이트 콜백 등록 함수 (마스터 클라이언트 동기화용)
   const setOnSyncUpdate = useCallback((callback: (state: AppState) => void) => {
     onSyncUpdateCallbackRef.current = callback;
@@ -312,7 +297,6 @@ export const useWebSocket = (roomId?: string) => {
     nextTrack,
     prevTrack,
     requestSync,
-    setOnSeek,
     setOnSyncUpdate,
     getCurrentPosition
   };

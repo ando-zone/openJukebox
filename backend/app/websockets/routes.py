@@ -68,8 +68,8 @@ async def websocket_endpoint(
                 await websocket.send_text(json.dumps({"type": "pong"}))
             
             else:
-                # 알 수 없는 메시지 타입
-                print(f"알 수 없는 메시지 타입: {message.get('type', 'unknown')}")
+                # 알 수 없는 메시지 타입 - 로깅만 하고 무시
+                pass
     
     except WebSocketDisconnect:
         # 클라이언트 연결 종료

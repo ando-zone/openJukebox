@@ -29,7 +29,6 @@ export default function RoomPage({ params }: RoomPageProps) {
     seekTrack,
     nextTrack,
     prevTrack,
-    setOnSeek,
     setOnSyncUpdate,
     getCurrentPosition
   } = useWebSocket(roomId);
@@ -130,7 +129,6 @@ export default function RoomPage({ params }: RoomPageProps) {
               onSeek={seekTrack}
               onNext={nextTrack}
               onPrev={prevTrack}
-              setOnSeek={setOnSeek}
               setOnSyncUpdate={setOnSyncUpdate}
               getCurrentPosition={getCurrentPosition}
             />

@@ -142,6 +142,15 @@ class MasterClient:
     
     async def handle_seek(self, position: float):
         """재생 위치 변경 처리"""
+        # 위치가 유효한지 확인
+        if position < 0:
+            return
+            
+        # 현재 위치와 너무 가까우면 무시 (1초 이내 차이)
+        current_pos = self.playback_state.get_current_position()
+        if abs(position - current_pos) < 1.0:
+            return
+            
         self.playback_state.update_position(position)
         await self._broadcast_state_update()
     

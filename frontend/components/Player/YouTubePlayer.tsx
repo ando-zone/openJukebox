@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, RotateCcw, RefreshCw } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, RotateCcw } from 'lucide-react';
 import YouTube, { YouTubeEvent, YouTubePlayer as YTPlayer } from 'react-youtube';
 
 interface Track {
@@ -33,7 +33,6 @@ interface YouTubePlayerProps {
   onSeek: (position: number, index?: number) => void;
   onNext: () => void;
   onPrev: () => void;
-  setOnSeek: (callback: (position: number) => void) => void;
   setOnSyncUpdate: (callback: (state: AppState) => void) => void;
   getCurrentPosition: () => number;
 }
@@ -49,7 +48,6 @@ export default function YouTubePlayer({
   onSeek,
   onNext,
   onPrev,
-  setOnSeek,
   setOnSyncUpdate,
   getCurrentPosition
 }: YouTubePlayerProps) {
@@ -67,10 +65,12 @@ export default function YouTubePlayer({
   
   // 사용자 seek 감지를 위한 이전 위치 추적
   const lastPositionRef = useRef(0);
-  const positionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // 서버 seek 타임스탬프 추적
-  const serverSeekTimeRef = useRef(0);
+  // 마스터 클라이언트 동기화 타임스탬프 추적
+  const masterSyncTimeRef = useRef(0);
+  
+  // YouTube seek으로 인한 일시정지 추적
+  const seekPauseTimeRef = useRef(0);
   
   // 현재 재생할 비디오
   const currentVideo = currentTrack !== null && playlist.length > 0 
@@ -79,100 +79,57 @@ export default function YouTubePlayer({
 
   // ===== Effect 훅들 =====
   
-  // 사용자 seek 감지를 위한 위치 모니터링
+  // 재생/일시정지 동기화
   useEffect(() => {
     if (!isPlayerReady || !playerRef.current) return;
     
-    // 기존 인터벌 정리
-    if (positionCheckIntervalRef.current) {
-      clearInterval(positionCheckIntervalRef.current);
-    }
-    
-    // 1초마다 위치 체크
-    const interval = setInterval(() => {
-      if (!playerRef.current) return;
+    try {
+      const player = playerRef.current;
+      if (!player) return;
       
-      try {
-        const currentTime = Math.floor(playerRef.current.getCurrentTime());
-        const lastPos = lastPositionRef.current;
-        const timeDiff = Math.abs(currentTime - lastPos);
-        const now = Date.now();
-        
-        // 최근 서버 seek 여부 확인 (3초 이내)
-        const isRecentServerSeek = (now - serverSeekTimeRef.current) < 3000;
-        
-        console.log(`📊 위치 체크: ${lastPos}초 → ${currentTime}초 (차이: ${timeDiff}초, 서버seek: ${isRecentServerSeek})`);
-        
-        // 사용자 seek 감지 조건: 3초 이상 차이나고, 최근 서버 seek이 아니며, 5초 이후 위치일 때
-        if (timeDiff >= 3 && !isRecentServerSeek && currentTime >= 5) {
-          console.log(`🎯 사용자 seek 감지: ${lastPos}초 → ${currentTime}초`);
-          console.log('👆 모든 사용자에게 위치 동기화 전송');
-          onSeek(currentTime);
+      if (isPlaying) {
+        if (typeof player.playVideo === 'function') {
+          player.playVideo();
         }
-        
-        lastPositionRef.current = currentTime;
-      } catch (error) {
-        console.error('위치 체크 오류:', error);
+      } else {
+        if (typeof player.pauseVideo === 'function') {
+          player.pauseVideo();
+        }
       }
-    }, 1000);
-    
-    positionCheckIntervalRef.current = interval;
-    
-    // 정리 함수
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [isPlayerReady, onSeek]);
-  
-  // seek 콜백 등록 - 서버에서 seek 이벤트 받으면 플레이어 이동
-  useEffect(() => {
-    setOnSeek((position: number) => {
-      if (!isPlayerReady || !playerRef.current) {
-        console.log('플레이어 준비되지 않음 - seek 무시');
-        return;
-      }
-      
-      console.log(`🎯 서버에서 seek 이벤트 수신: ${position}초 - 플레이어 이동`);
-      
-      try {
-        // 서버 seek 타임스탬프 기록
-        serverSeekTimeRef.current = Date.now();
-        
-        // 예상 위치 미리 업데이트 (감지 방지)
-        lastPositionRef.current = position;
-        
-        playerRef.current.seekTo(position, true);
-        
-        console.log(`⏰ 서버 seek 타임스탬프 기록: ${serverSeekTimeRef.current}`);
-      } catch (error) {
-        console.error('Seek 처리 오류:', error);
-      }
-    });
-  }, [isPlayerReady, setOnSeek]);
+    } catch (error) {
+      console.error('플레이어 제어 오류:', error);
+    }
+  }, [isPlaying, isPlayerReady]);
   
   // 마스터 클라이언트 동기화 콜백 등록
   useEffect(() => {
     setOnSyncUpdate((state: AppState) => {
       if (!isPlayerReady || !playerRef.current) {
-        console.log('플레이어 준비되지 않음 - 동기화 무시');
         return;
       }
       
       try {
         // 위치 동기화
         if (state.position !== undefined && state.position > 0) {
-          const currentPlayerTime = Math.floor(playerRef.current.getCurrentTime());
+          // 안전한 플레이어 접근
+          const player = playerRef.current;
+          if (!player || typeof player.getCurrentTime !== 'function') {
+            return;
+          }
+          
+          const currentPlayerTime = Math.floor(player.getCurrentTime());
           const targetPosition = Math.floor(state.position);
           const timeDiff = Math.abs(currentPlayerTime - targetPosition);
           
           // 3초 이상 차이나면 동기화
           if (timeDiff >= 3) {
-            console.log(`🔄 마스터 동기화: ${currentPlayerTime}초 → ${targetPosition}초`);
-            serverSeekTimeRef.current = Date.now();
+            masterSyncTimeRef.current = Date.now();
             lastPositionRef.current = targetPosition;
-            playerRef.current.seekTo(targetPosition, true);
+            
+            // seekTo 메서드 존재 확인
+            if (typeof player.seekTo === 'function') {
+              player.seekTo(targetPosition, true);
+            }
           }
         }
       } catch (error) {
@@ -180,23 +137,6 @@ export default function YouTubePlayer({
       }
     });
   }, [isPlayerReady, setOnSyncUpdate]);
-  
-  // 재생/일시정지 동기화
-  useEffect(() => {
-    if (!isPlayerReady || !playerRef.current) return;
-    
-    try {
-      if (isPlaying) {
-        console.log('▶️ YouTube 플레이어 재생');
-        playerRef.current.playVideo();
-      } else {
-        console.log('⏸️ YouTube 플레이어 일시정지');
-        playerRef.current.pauseVideo();
-      }
-    } catch (error) {
-      console.error('플레이어 제어 오류:', error);
-    }
-  }, [isPlaying, isPlayerReady]);
 
   // ===== YouTube 플레이어 설정 =====
   
@@ -228,51 +168,88 @@ export default function YouTubePlayer({
   
   const handleStateChange = (event: YouTubeEvent) => {
     const playerState = event.data;
-    console.log(`🎵 플레이어 상태: ${playerState}`);
+    const now = Date.now();
     
-    // 사용자 직접 조작만 서버에 알림
+    // YouTube 플레이어 상태: 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
+    
     if (playerState === 1 && !isPlaying) {
-      console.log('👆 사용자 직접 재생');
+      // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
       onPlay();
     } else if (playerState === 2 && isPlaying) {
-      console.log('👆 사용자 직접 일시정지');
-      onPause();
+      // 일시정지 감지 - seek으로 인한 것인지 확인
+      const isSeekPause = (now - seekPauseTimeRef.current) < 1000; // 1초 이내
+      
+      if (!isSeekPause) {
+        // 실제 사용자 일시정지
+        onPause();
+      }
+      // seek으로 인한 일시정지는 무시 (자동으로 재생 복원됨)
     } else if (playerState === 0) {
-      console.log('🔚 동영상 종료 - 다음 트랙');
+      // 동영상 종료
       onNext();
+    }
+    
+    // 사용자가 YouTube 컨트롤로 seek한 경우 감지
+    if (playerRef.current && isPlayerReady) {
+      try {
+        const player = playerRef.current;
+        if (!player || typeof player.getCurrentTime !== 'function') {
+          return;
+        }
+        
+        const currentTime = Math.floor(player.getCurrentTime());
+        const lastPos = lastPositionRef.current;
+        const timeDiff = Math.abs(currentTime - lastPos);
+        
+        // 최근 마스터 동기화 여부 확인 (3초 이내)
+        const isRecentMasterSync = (now - masterSyncTimeRef.current) < 500;
+        
+        // 사용자 seek 감지: 3초 이상 차이나고 최근 마스터 동기화가 아닐 때
+        if (timeDiff >= 3 && !isRecentMasterSync && currentTime > 0) {
+          // seek으로 인한 일시정지 타임스탬프 기록
+          seekPauseTimeRef.current = now;
+          
+          // seek 위치 전송
+          onSeek(currentTime);
+          
+          // 재생 중이었다면 잠시 후 자동 재생 복원
+          if (isPlaying) {
+            setTimeout(() => {
+              if (player && typeof player.playVideo === 'function') {
+                player.playVideo();
+              }
+            }, 100); // 100ms 후 재생 복원
+          }
+        }
+        
+        lastPositionRef.current = currentTime;
+      } catch (error) {
+        console.error('사용자 seek 감지 오류:', error);
+      }
     }
   };
   
-  // 수동 위치 동기화 버튼
-  const handleManualSeek = () => {
-    if (!playerRef.current) return;
-    
-    try {
-      const currentTime = Math.floor(playerRef.current.getCurrentTime());
-      console.log(`👆 수동 위치 동기화: ${currentTime}초 - 모든 사용자에게 적용`);
-      onSeek(currentTime);
-    } catch (error) {
-      console.error('수동 Seek 처리 오류:', error);
-    }
-  };
-
-  // 현재 위치 가져오기 (마스터 클라이언트 기준)
-  const getCurrentMasterPosition = () => {
+  // 마스터 클라이언트 위치로 동기화 (클라이언트가 마스터와 안 맞을 때 사용)
+  const syncToMasterPosition = () => {
     if (!position || position <= 0) {
-      console.log('📍 서버 위치가 없어서 동기화 불가');
       return;
     }
     
-    console.log(`📍 서버 위치로 동기화: ${position.toFixed(1)}초`);
+    console.log(`📍 마스터 위치로 동기화: ${position.toFixed(1)}초`);
     
     if (playerRef.current) {
       try {
-        serverSeekTimeRef.current = Date.now();
+        const player = playerRef.current;
+        if (!player || typeof player.seekTo !== 'function') {
+          console.error('플레이어가 준비되지 않았습니다.');
+          return;
+        }
+        
+        masterSyncTimeRef.current = Date.now();
         lastPositionRef.current = Math.floor(position);
-        playerRef.current.seekTo(position, true);
-        console.log(`🔄 서버 위치로 동기화 완료: ${position.toFixed(1)}초`);
+        player.seekTo(position, true);
       } catch (error) {
-        console.error('서버 위치 동기화 오류:', error);
+        console.error('마스터 위치 동기화 오류:', error);
       }
     }
   };
@@ -290,8 +267,12 @@ export default function YouTubePlayer({
             <p className="text-gray-400 text-sm">{currentVideo.channel}</p>
             {position !== undefined && lastUpdateTime && (
               <p className="text-green-400 text-xs mt-1">
-                서버 위치: {position.toFixed(1)}초 | 
-                실제 플레이어: {playerRef.current ? playerRef.current.getCurrentTime().toFixed(1) : '0.0'}초
+                마스터 위치: {position.toFixed(1)}초 | 
+                내 플레이어: {
+                  playerRef.current && typeof playerRef.current.getCurrentTime === 'function' 
+                    ? playerRef.current.getCurrentTime().toFixed(1) 
+                    : '준비중'
+                }초
               </p>
             )}
           </div>
@@ -328,24 +309,15 @@ export default function YouTubePlayer({
           </button>
         </div>
 
-        {/* 동기화 버튼들 */}
-        <div className="flex items-center justify-center gap-3 mt-6">
+        {/* 서버 동기화 버튼 */}
+        <div className="flex items-center justify-center mt-6">
           <button 
-            onClick={handleManualSeek}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-green-500/30 text-green-400 hover:text-green-300"
-            title="현재 위치를 모든 사용자에게 동기화"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span className="text-sm font-medium">위치 공유</span>
-          </button>
-          
-          <button 
-            onClick={getCurrentMasterPosition}
+            onClick={syncToMasterPosition}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-purple-500/30 text-purple-400 hover:text-purple-300"
-            title="서버 위치로 내 플레이어 동기화"
+            title="마스터 위치로 내 플레이어 동기화"
           >
             <RotateCcw className="w-4 h-4" />
-            <span className="text-sm font-medium">서버 동기화</span>
+            <span className="text-sm font-medium">마스터 동기화</span>
           </button>
         </div>
       </div>
