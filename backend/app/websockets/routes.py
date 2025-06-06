@@ -63,10 +63,6 @@ async def websocket_endpoint(
                 # 클라이언트가 동기화 요청 - 마스터 클라이언트가 자동으로 처리하므로 무시
                 pass
             
-            elif message["type"] == "ping":
-                # 하트비트 ping 요청 - pong으로 응답
-                await websocket.send_text(json.dumps({"type": "pong"}))
-            
             else:
                 # 알 수 없는 메시지 타입 - 로깅만 하고 무시
                 pass
