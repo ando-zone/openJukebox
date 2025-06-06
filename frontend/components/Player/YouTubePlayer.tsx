@@ -34,7 +34,6 @@ interface YouTubePlayerProps {
   onNext: () => void;
   onPrev: () => void;
   setOnSyncUpdate: (callback: (state: AppState) => void) => void;
-  getCurrentPosition: () => number;
 }
 
 export default function YouTubePlayer({
@@ -49,7 +48,6 @@ export default function YouTubePlayer({
   onNext,
   onPrev,
   setOnSyncUpdate,
-  getCurrentPosition
 }: YouTubePlayerProps) {
   
   // ===== 상태 관리 =====

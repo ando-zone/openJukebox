@@ -130,7 +130,6 @@ export default function RoomPage({ params }: RoomPageProps) {
               onNext={nextTrack}
               onPrev={prevTrack}
               setOnSyncUpdate={setOnSyncUpdate}
-              getCurrentPosition={getCurrentPosition}
             />
           </div>
           

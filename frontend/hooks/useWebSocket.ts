@@ -113,7 +113,6 @@ export const useWebSocket = (roomId?: string) => {
   
   // 재연결 관련 상태
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
 
@@ -126,36 +125,17 @@ export const useWebSocket = (roomId?: string) => {
     // 룸 ID를 포함한 WebSocket URL
     const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws${roomId ? `?room_id=${roomId}` : ''}`);
 
-    // 하트비트 전송 함수 (로컬 함수로 정의)
-    const sendHeartbeat = () => {
-      if (socketInstance && socketInstance.readyState === WebSocket.OPEN) {
-        socketInstance.send(JSON.stringify({ type: 'ping' }));
-      }
-    };
-
     // 연결 이벤트
     socketInstance.onopen = () => {
       console.log(`웹소켓 연결됨 (방: ${roomId})`);
       setIsConnected(true);
       reconnectAttemptsRef.current = 0; // 재연결 시도 횟수 리셋
-      
-      // 하트비트 시작 (30초마다)
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-      }
-      heartbeatIntervalRef.current = setInterval(sendHeartbeat, 30000);
     };
 
     // 연결 종료 이벤트
     socketInstance.onclose = (event) => {
       console.log('웹소켓 연결 종료', event.code, event.reason);
       setIsConnected(false);
-      
-      // 하트비트 정리
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-        heartbeatIntervalRef.current = null;
-      }
       
       // 자동 재연결 시도 (정상 종료가 아닌 경우)
       if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
@@ -178,11 +158,6 @@ export const useWebSocket = (roomId?: string) => {
     socketInstance.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
-        // Pong 응답 처리
-        if (data.type === 'pong') {
-          return;
-        }
         
         if (data.type === 'master_sync' && data.data) {
           // 마스터 클라이언트로부터의 동기화 업데이트 (유일한 동기화 방식)
@@ -213,9 +188,6 @@ export const useWebSocket = (roomId?: string) => {
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
       }
       if (socket) {
         socket.close(1000); // 정상 종료
