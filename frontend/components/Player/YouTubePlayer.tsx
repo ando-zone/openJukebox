@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, RotateCcw } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 import YouTube, { YouTubeEvent, YouTubePlayer as YTPlayer } from 'react-youtube';
 
 interface Track {
@@ -58,9 +58,6 @@ export default function YouTubePlayer({
   // 플레이어 준비 상태만 관리
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   
-  // 서버 seek 감지를 위한 상태
-  const [isServerSeek, setIsServerSeek] = useState(false);
-  
   // 사용자 seek 감지를 위한 이전 위치 추적
   const lastPositionRef = useRef(0);
   
@@ -78,87 +75,6 @@ export default function YouTubePlayer({
     ? playlist[currentTrack] 
     : null;
 
-  // ===== Effect 훅들 =====
-  
-  // 재생/일시정지 동기화
-  useEffect(() => {
-    if (!isPlayerReady || !playerRef.current) return;
-    
-    try {
-      const player = playerRef.current;
-      if (!player) return;
-      
-      if (isPlaying) {
-        if (typeof player.playVideo === 'function') {
-          player.playVideo();
-        }
-      } else {
-        if (typeof player.pauseVideo === 'function') {
-          player.pauseVideo();
-        }
-      }
-    } catch (error) {
-      console.error('플레이어 제어 오류:', error);
-    }
-  }, [isPlaying, isPlayerReady]);
-  
-  // 마스터 클라이언트 동기화 콜백 등록
-  useEffect(() => {
-    setOnSyncUpdate((state: AppState) => {
-      if (!isPlayerReady || !playerRef.current) {
-        return;
-      }
-      
-      try {
-        // 위치 동기화
-        if (state.position !== undefined && state.position > 0) {
-          // 안전한 플레이어 접근
-          const player = playerRef.current;
-          if (!player || typeof player.getCurrentTime !== 'function') {
-            return;
-          }
-          
-          const currentPlayerTime = Math.floor(player.getCurrentTime());
-          const targetPosition = Math.floor(state.position);
-          const timeDiff = Math.abs(currentPlayerTime - targetPosition);
-          
-          // 3초 이상 차이나면 동기화
-          if (timeDiff >= 3) {
-            masterSyncTimeRef.current = Date.now();
-            lastPositionRef.current = targetPosition;
-            
-            // seekTo 메서드 존재 확인
-            if (typeof player.seekTo === 'function') {
-              player.seekTo(targetPosition, true);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('동기화 처리 오류:', error);
-      }
-    });
-  }, [isPlayerReady, setOnSyncUpdate]);
-
-  // ===== YouTube 플레이어 설정 =====
-  
-  const opts = {
-    height: '100%',
-    width: '100%',
-    playerVars: {
-      autoplay: 0,        // 자동 재생 비활성화 (새 사용자 입장 시 자동 재생 방지)
-      mute: 0,
-      controls: 1,        // YouTube 자체 컨트롤 사용 (시간 표시 포함)
-      rel: 0,
-      modestbranding: 1,
-      iv_load_policy: 3,
-      fs: 1,
-      cc_load_policy: 0,
-      start: 0, // 항상 0초부터 시작
-      enablejsapi: 1,
-      origin: typeof window !== 'undefined' ? window.location.origin : '',
-    },
-  };
-  
   // ===== 이벤트 핸들러들 =====
   
   const handleReady = (event: YouTubeEvent) => {
@@ -255,31 +171,84 @@ export default function YouTubePlayer({
       }
     }
   };
+
+  // ===== Effect 훅들 =====
   
-  // 마스터 클라이언트 위치로 동기화 (클라이언트가 마스터와 안 맞을 때 사용)
-  const syncToMasterPosition = () => {
-    if (!position || position <= 0) {
-      return;
-    }
+  // 외부 재생 상태를 YouTube 플레이어에 반영
+  useEffect(() => {
+    if (!isPlayerReady || !playerRef.current) return;
     
-    console.log(`📍 마스터 위치로 동기화: ${position.toFixed(1)}초`);
-    
-    if (playerRef.current) {
-      try {
-        const player = playerRef.current;
-        if (!player || typeof player.seekTo !== 'function') {
-          console.error('플레이어가 준비되지 않았습니다.');
-          return;
-        }
-        
-        masterSyncTimeRef.current = Date.now();
-        lastPositionRef.current = Math.floor(position);
-        player.seekTo(position, true);
-      } catch (error) {
-        console.error('마스터 위치 동기화 오류:', error);
+    try {
+      const player = playerRef.current;
+      
+      if (isPlaying) {
+        player.playVideo();
+      } else {
+        player.pauseVideo();
       }
+    } catch (error) {
+      console.error('플레이어 제어 오류:', error);
     }
+  }, [isPlaying, isPlayerReady]);
+  
+  // 마스터 클라이언트 동기화 콜백 등록
+  useEffect(() => {
+    setOnSyncUpdate((state: AppState) => {
+      if (!isPlayerReady || !playerRef.current) {
+        return;
+      }
+      
+      try {
+        // 위치 동기화
+        if (state.position !== undefined && state.position > 0) {
+          // 안전한 플레이어 접근
+          const player = playerRef.current;
+          if (!player || typeof player.getCurrentTime !== 'function') {
+            return;
+          }
+          
+          const currentPlayerTime = Math.floor(player.getCurrentTime());
+          const targetPosition = Math.floor(state.position);
+          const timeDiff = Math.abs(currentPlayerTime - targetPosition);
+          
+          // 3초 이상 차이나면 동기화
+          if (timeDiff >= 3) {
+            masterSyncTimeRef.current = Date.now();
+            lastPositionRef.current = targetPosition;
+            
+            // seekTo 메서드 존재 확인
+            if (typeof player.seekTo === 'function') {
+              player.seekTo(targetPosition, true);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('동기화 처리 오류:', error);
+      }
+    });
+  }, [isPlayerReady, setOnSyncUpdate]);
+
+  // ===== YouTube 플레이어 설정 =====
+  
+  const opts = {
+    height: '100%',
+    width: '100%',
+    playerVars: {
+      autoplay: 0,        // 자동 재생 비활성화 (새 사용자 입장 시 자동 재생 방지)
+      mute: 0,
+      controls: 1,        // YouTube 자체 컨트롤 사용 (시간 표시 포함)
+      rel: 0,
+      modestbranding: 1,
+      iv_load_policy: 3,
+      fs: 1,
+      cc_load_policy: 0,
+      start: 0, // 항상 0초부터 시작
+      enablejsapi: 1,
+      origin: typeof window !== 'undefined' ? window.location.origin : '',
+    },
   };
+
+  // ===== 렌더링 함수들 =====
 
   // 컨트롤 버튼들
   const renderControls = () => {
@@ -292,16 +261,6 @@ export default function YouTubePlayer({
               {currentVideo.title}
             </h3>
             <p className="text-gray-400 text-sm">{currentVideo.channel}</p>
-            {position !== undefined && lastUpdateTime && (
-              <p className="text-green-400 text-xs mt-1">
-                마스터 위치: {position.toFixed(1)}초 | 
-                내 플레이어: {
-                  playerRef.current && typeof playerRef.current.getCurrentTime === 'function' 
-                    ? playerRef.current.getCurrentTime().toFixed(1) 
-                    : '준비중'
-                }초
-              </p>
-            )}
           </div>
         )}
 
@@ -336,20 +295,12 @@ export default function YouTubePlayer({
           </button>
         </div>
 
-        {/* 서버 동기화 버튼 */}
-        <div className="flex items-center justify-center mt-6">
-          <button 
-            onClick={syncToMasterPosition}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-all duration-200 backdrop-blur-sm border border-purple-500/30 text-purple-400 hover:text-purple-300"
-            title="마스터 위치로 내 플레이어 동기화"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span className="text-sm font-medium">마스터 동기화</span>
-          </button>
-        </div>
+
       </div>
     );
   };
+
+  // ===== 메인 렌더링 =====
 
   // 빈 플레이리스트 처리
   if (!currentVideo) {
