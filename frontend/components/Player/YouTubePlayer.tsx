@@ -30,7 +30,7 @@ interface YouTubePlayerProps {
   lastUpdateTime?: number;
   onPlay: () => void;
   onPause: () => void;
-  onSeek: (position: number, index?: number) => void;
+  onSeek: (position: number, index?: number) => Promise<void>;
   onNext: () => void;
   onPrev: () => void;
   setOnSyncUpdate: (callback: (state: AppState) => void) => void;
@@ -64,8 +64,8 @@ export default function YouTubePlayer({
   // 마스터 클라이언트 동기화 타임스탬프 추적
   const masterSyncTimeRef = useRef(0);
   
-  // YouTube seek으로 인한 일시정지 추적
-  const seekPauseTimeRef = useRef(0);
+  // seek 작업 중인지 추적 (더 정확함)
+  const isSeekingRef = useRef(false);
   
   // 초기 로딩 중인지 추적 (자동 재생 방지용)
   const isInitialLoadingRef = useRef(true);
@@ -75,24 +75,27 @@ export default function YouTubePlayer({
     ? playlist[currentTrack] 
     : null;
 
+  // ===== 유틸리티 함수들 =====
+  
+  // 사용자 의도적 seek 감지 조건 확인
+  const isIntentionalSeek = (timeDiff: number, isRecentMasterSync: boolean, currentTime: number): boolean => {
+    return timeDiff >= 3 && !isRecentMasterSync && currentTime > 0;
+  };
+
   // ===== 이벤트 핸들러들 =====
   
   const handleReady = (event: YouTubeEvent) => {
-    console.log('🎬 YouTube 플레이어 준비 완료');
     playerRef.current = event.target;
     setIsPlayerReady(true);
     
     // 초기 로딩 완료 후 잠시 대기한 다음 플래그 해제
     setTimeout(() => {
       isInitialLoadingRef.current = false;
-      
+
       // 마스터 상태에 따라 플레이어 동기화
       if (isPlaying && playerRef.current) {
         try {
-          const player = playerRef.current;
-          if (typeof player.playVideo === 'function') {
-            player.playVideo();
-          }
+          playerRef.current.playVideo();
         } catch (error) {
           console.error('초기 재생 동기화 오류:', error);
         }
@@ -110,33 +113,11 @@ export default function YouTubePlayer({
       return;
     }
     
-    // YouTube 플레이어 상태: 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
-    
-    if (playerState === 1 && !isPlaying) {
-      // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
-      console.log('▶️ YouTube 플레이어에서 재생 감지');
-      onPlay();
-    } else if (playerState === 2 && isPlaying) {
-      // 일시정지 감지 - seek으로 인한 것인지 확인
-      const isSeekPause = (now - seekPauseTimeRef.current) < 1000; // 1초 이내
-      
-      if (!isSeekPause) {
-        // 실제 사용자 일시정지
-        console.log('⏸️ YouTube 플레이어에서 일시정지 감지');
-        onPause();
-      }
-      // seek으로 인한 일시정지는 무시 (자동으로 재생 복원됨)
-    } else if (playerState === 0) {
-      // 동영상 종료
-      console.log('⏭️ 동영상 종료 - 다음 트랙으로');
-      onNext();
-    }
-    
-    // 사용자가 YouTube 컨트롤로 seek한 경우 감지
+    // 🔥 SEEK 감지를 먼저 처리! (일시정지 감지보다 우선)
     if (playerRef.current && isPlayerReady) {
       try {
         const player = playerRef.current;
-        if (!player || typeof player.getCurrentTime !== 'function') {
+        if (!player) {
           return;
         }
         
@@ -144,31 +125,52 @@ export default function YouTubePlayer({
         const lastPos = lastPositionRef.current;
         const timeDiff = Math.abs(currentTime - lastPos);
         
-        // 최근 마스터 동기화 여부 확인 (3초 이내)
+        // 최근 마스터 동기화 여부 확인 (500ms 이내)
         const isRecentMasterSync = (now - masterSyncTimeRef.current) < 500;
         
-        // 사용자 seek 감지: 3초 이상 차이나고 최근 마스터 동기화가 아닐 때
-        if (timeDiff >= 3 && !isRecentMasterSync && currentTime > 0) {
-          // seek으로 인한 일시정지 타임스탬프 기록
-          seekPauseTimeRef.current = now;
+        // 사용자 의도적 seek 감지
+        if (isIntentionalSeek(timeDiff, isRecentMasterSync, currentTime)) {
+          // seek 시작 플래그 설정
+          isSeekingRef.current = true;
           
-          // seek 위치 전송
-          onSeek(currentTime);
-          
-          // 재생 중이었다면 잠시 후 자동 재생 복원
-          if (isPlaying) {
-            setTimeout(() => {
-              if (player && typeof player.playVideo === 'function') {
-                player.playVideo();
-              }
-            }, 100); // 100ms 후 재생 복원
-          }
+          // seek 위치 전송하고 실제 완료까지 대기
+          onSeek(currentTime)
+            .then(() => {
+              // 실제 완료 후 플래그 해제
+              isSeekingRef.current = false;
+            })
+            .catch((error) => {
+              // 에러 발생 시에도 플래그 해제 (안전장치)
+              console.error('seek 완료 대기 중 오류:', error);
+              isSeekingRef.current = false;
+            });
         }
         
         lastPositionRef.current = currentTime;
       } catch (error) {
         console.error('사용자 seek 감지 오류:', error);
       }
+    }
+    
+    // YouTube 플레이어 상태 처리 (seek 감지 후에 처리)
+    // 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
+    
+    if (playerState === 1 && !isPlaying) {
+      // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
+      console.log('▶️ YouTube 플레이어에서 재생 감지');
+      onPlay();
+    } else if (playerState === 2 && isPlaying) {
+      // 일시정지 감지 - seek 중이 아닐 때만 실제 일시정지로 처리
+      if (!isSeekingRef.current) {
+        // 실제 사용자 일시정지 (YouTube 컨트롤 사용, 스페이스바 등)
+        console.log('⏸️ YouTube 플레이어에서 일시정지 감지');
+        onPause();
+      }
+      // seek 중인 일시정지는 무시 (Promise로 정확하게 관리됨)
+    } else if (playerState === 0) {
+      // 동영상 종료
+      console.log('⏭️ 동영상 종료 - 다음 트랙으로');
+      onNext();
     }
   };
 
@@ -203,7 +205,7 @@ export default function YouTubePlayer({
         if (state.position !== undefined && state.position > 0) {
           // 안전한 플레이어 접근
           const player = playerRef.current;
-          if (!player || typeof player.getCurrentTime !== 'function') {
+          if (!player) {
             return;
           }
           
@@ -211,15 +213,13 @@ export default function YouTubePlayer({
           const targetPosition = Math.floor(state.position);
           const timeDiff = Math.abs(currentPlayerTime - targetPosition);
           
-          // 3초 이상 차이나면 동기화
-          if (timeDiff >= 3) {
+          // 2초 이상 차이나면 동기화
+          if (timeDiff >= 2) {
             masterSyncTimeRef.current = Date.now();
             lastPositionRef.current = targetPosition;
             
-            // seekTo 메서드 존재 확인
-            if (typeof player.seekTo === 'function') {
-              player.seekTo(targetPosition, true);
-            }
+            // seekTo 실행
+            player.seekTo(targetPosition, true);
           }
         }
       } catch (error) {
