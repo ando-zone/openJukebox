@@ -82,6 +82,20 @@ export default function YouTubePlayer({
     return timeDiff >= 3 && !isRecentMasterSync && currentTime > 0;
   };
 
+  /**
+   * 마스터 클라이언트로부터 받은 위치 정보가 동기화 가능한지 확인
+   * 
+   * @param position - 마스터 클라이언트의 재생 위치 (초 단위)
+   * @returns 동기화 가능한 유효한 위치인지 여부
+   * 
+   * 조건:
+   * - position이 undefined가 아님 (유효한 값 존재)
+   * - position이 0보다 큼 (실제 재생 중인 위치, 0초는 초기/정지 상태)
+   */
+     const isValidSyncPosition = (position: number | undefined): position is number => {
+     return position !== undefined && position > 0;
+   };
+
   // ===== 이벤트 핸들러들 =====
   
   const handleReady = (event: YouTubeEvent) => {
@@ -160,13 +174,8 @@ export default function YouTubePlayer({
       console.log('▶️ YouTube 플레이어에서 재생 감지');
       onPlay();
     } else if (playerState === 2 && isPlaying) {
-      // 일시정지 감지 - seek 중이 아닐 때만 실제 일시정지로 처리
-      if (!isSeekingRef.current) {
-        // 실제 사용자 일시정지 (YouTube 컨트롤 사용, 스페이스바 등)
-        console.log('⏸️ YouTube 플레이어에서 일시정지 감지');
-        onPause();
-      }
-      // seek 중인 일시정지는 무시 (Promise로 정확하게 관리됨)
+      console.log('⏸️ YouTube 플레이어에서 일시정지 감지');
+      onPause();
     } else if (playerState === 0) {
       // 동영상 종료
       console.log('⏭️ 동영상 종료 - 다음 트랙으로');
@@ -202,7 +211,7 @@ export default function YouTubePlayer({
       
       try {
         // 위치 동기화
-        if (state.position !== undefined && state.position > 0) {
+        if (isValidSyncPosition(state.position)) {
           // 안전한 플레이어 접근
           const player = playerRef.current;
           if (!player) {
@@ -215,11 +224,24 @@ export default function YouTubePlayer({
           
           // 2초 이상 차이나면 동기화
           if (timeDiff >= 2) {
-            masterSyncTimeRef.current = Date.now();
-            lastPositionRef.current = targetPosition;
-            
-            // seekTo 실행
-            player.seekTo(targetPosition, true);
+            // YouTube 플레이어가 실제로 seek 가능한 상태인지 확인
+            try {
+              const duration = player.getDuration();
+              const playerState = player.getPlayerState();
+              
+              // 비디오가 로드되고, 재생 가능한 상태에서만 seek
+              if (duration > 0 && targetPosition <= duration && playerState !== -1) {
+                masterSyncTimeRef.current = Date.now();
+                lastPositionRef.current = targetPosition;
+                
+                // seekTo 실행
+                player.seekTo(targetPosition, true);
+              } else {
+                console.log('🔄 동기화 스킵 - 플레이어 준비 안됨:', { duration, targetPosition, playerState });
+              }
+            } catch (seekError) {
+              console.error('seekTo 실행 중 오류:', seekError);
+            }
           }
         }
       } catch (error) {
