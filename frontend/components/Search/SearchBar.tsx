@@ -17,7 +17,7 @@ interface SearchProps {
   onAddTrack: (track: Track) => void;
 }
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://jukebox-backend-0s8r.onrender.com';
 
 export default function SearchBar({ onAddTrack }: SearchProps) {
   const [query, setQuery] = useState('');

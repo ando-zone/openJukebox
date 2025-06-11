@@ -39,8 +39,8 @@ const initialState: AppState = {
 };
 
 // API 기본 URL
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
-const WS_BASE_URL = process.env.WS_BASE_URL || 'ws://localhost:8000';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://jukebox-backend-0s8r.onrender.com';
+const WS_BASE_URL = process.env.WS_BASE_URL || 'wss://jukebox-backend-0s8r.onrender.com';
 
 export const useRooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
