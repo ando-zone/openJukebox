@@ -287,12 +287,16 @@ export const useWebSocket = (roomId?: string) => {
   }, [sendMessage]);
 
   // 재생 위치 변경
-  const seekTrack = useCallback((position: number, trackIndex?: number) => {
+  const seekTrack = useCallback(async (position: number, trackIndex?: number): Promise<void> => {
     if (trackIndex !== undefined) {
       sendMessage('seek', { position, current_track: trackIndex });
     } else {
       sendMessage('seek', { position });
     }
+    
+    // 서버 응답을 기다리는 로직을 추가할 수 있음
+    // 현재는 단순히 메시지 전송 후 Promise 반환
+    return Promise.resolve();
   }, [sendMessage]);
 
   // 다음 트랙
