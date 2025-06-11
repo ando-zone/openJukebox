@@ -39,7 +39,8 @@ const initialState: AppState = {
 };
 
 // API 기본 URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'localhost:8000';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
+const WS_BASE_URL = process.env.WS_BASE_URL || 'ws://localhost:8000';
 
 export const useRooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -50,7 +51,7 @@ export const useRooms = () => {
   const fetchRooms = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://${API_BASE_URL}/api/rooms/`);
+      const response = await fetch(`${API_BASE_URL}/api/rooms/`);
       
       if (!response.ok) {
         throw new Error('룸 목록을 가져오는데 실패했습니다.');
@@ -76,7 +77,7 @@ export const useRooms = () => {
   // 룸 생성하기
   const createRoom = useCallback(async (roomData: { name: string; description?: string }) => {
     try {
-      const response = await fetch(`http://${API_BASE_URL}/api/rooms/`, {
+      const response = await fetch(`${API_BASE_URL}/api/rooms/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +123,7 @@ export const useRoomInfo = (roomId: string) => {
     
     try {
       setLoading(true);
-      const response = await fetch(`http://${API_BASE_URL}/api/rooms/${roomId}`);
+      const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}`);
       
       if (!response.ok) {
         throw new Error('방 정보를 가져오는데 실패했습니다.');
@@ -180,7 +181,7 @@ export const useWebSocket = (roomId?: string) => {
     console.log(`웹소켓 연결 시도... (방: ${roomId})`);
     
     // 룸 ID를 포함한 WebSocket URL
-    const socketInstance = new WebSocket(`ws://${API_BASE_URL}/ws${roomId ? `?room_id=${roomId}` : ''}`);
+    const socketInstance = new WebSocket(`${WS_BASE_URL}/ws${roomId ? `?room_id=${roomId}` : ''}`);
 
     // 연결 이벤트
     socketInstance.onopen = () => {
