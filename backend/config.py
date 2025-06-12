@@ -1,35 +1,34 @@
-import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+from pydantic import Field
+from urllib.parse import quote_plus
 
 # .env 파일 로드
 load_dotenv()
 
-class Settings(BaseSettings):
-    # FastAPI 설정
-    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
-    API_PORT: int = int(os.getenv("API_PORT", "8000"))
-    
+class Settings(BaseSettings):    
     # YouTube Data API 설정
-    YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
-    
+    YOUTUBE_API_KEY: str = Field(default="", env="YOUTUBE_API_KEY")
+
     # 클라이언트 URL (CORS)
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    
+    FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
+
     # PostgreSQL 데이터베이스 설정
-    DB_HOST: str = os.getenv("DB_HOST", "localhost")
-    DB_PORT: int = int(os.getenv("DB_PORT", "5432"))
-    DB_NAME: str = os.getenv("DB_NAME", "openjukebox")
-    DB_USER: str = os.getenv("DB_USER", "postgres")
-    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
-    
+    DB_HOST: str = Field(default="localhost", env="DB_HOST")
+    DB_PORT: int = Field(default=5432, env="DB_PORT")
+    DB_NAME: str = Field(default="openjukebox", env="DB_NAME")
+    DB_USER: str = Field(default="postgres", env="DB_USER")
+    DB_PASSWORD: str = Field(default="", env="DB_PASSWORD")
+
     @property
     def database_url(self) -> str:
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-    
+        pwd = quote_plus(self.DB_PASSWORD)
+        return f"postgresql://{self.DB_USER}:{pwd}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
     @property
     def async_database_url(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        pwd = quote_plus(self.DB_PASSWORD)
+        return f"postgresql+asyncpg://{self.DB_USER}:{pwd}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     class Config:
         env_file = ".env"
