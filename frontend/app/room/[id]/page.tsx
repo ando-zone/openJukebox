@@ -76,15 +76,6 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <Users className="w-4 h-4" style={{ color: isConnected ? '#4ade80' : '#ef4444' }} />
                 <span>{isConnected ? '연결됨' : '연결 끊김'}</span>
               </div>
-              <div className="badge">
-                <Headphones className="w-4 h-4" style={{ color: '#3b82f6' }} />
-                <span>{state.playlist.length}곡 대기중</span>
-              </div>
-              {lastSyncTime > 0 && (
-                <div className="badge">
-                  <span className="text-xs">마스터 동기화 활성</span>
-                </div>
-              )}
             </div>
           </div>
           
@@ -117,7 +108,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 )}
               </h1>
               <p className="text-gray-300">
-                {roomInfo?.description || '함께 음악을 즐기는 공간 (마스터 클라이언트 동기화)'}
+                {roomInfo?.description || '함께 음악을 즐기는 공간'}
               </p>
             </div>
           </div>
