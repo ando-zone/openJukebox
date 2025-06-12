@@ -39,8 +39,9 @@ const initialState: AppState = {
 };
 
 // API 기본 URL
-const API_BASE_URL = process.env.API_BASE_URL || 'https://jukebox-backend-0s8r.onrender.com';
-const WS_BASE_URL = process.env.WS_BASE_URL || 'wss://jukebox-backend-0s8r.onrender.com';
+// Next.js 클라이언트 사이드에서 사용하려면 NEXT_PUBLIC_ 접두사가 필요합니다
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://localhost:8000';
 
 export const useRooms = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
