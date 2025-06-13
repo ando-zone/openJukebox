@@ -64,12 +64,6 @@ export const useRooms = () => {
     } catch (err) {
       console.error('룸 목록 조회 에러:', err);
       setError('룸 목록을 가져오는데 실패했습니다.');
-      // 개발 편의를 위한 임시 데이터
-      setRooms([
-        { id: '1', name: '편안한 음악방', description: '차분한 음악을 즐겨요', createdAt: new Date().toISOString(), participants: 5 },
-        { id: '2', name: '신나는 파티룸', description: '에너지 넘치는 음악!', createdAt: new Date().toISOString(), participants: 12 },
-        { id: '3', name: '클래식 감상', description: '고전 음악 감상실', createdAt: new Date().toISOString(), participants: 3 },
-      ]);
     } finally {
       setLoading(false);
     }
@@ -136,14 +130,6 @@ export const useRoomInfo = (roomId: string) => {
     } catch (err) {
       console.error('방 정보 조회 에러:', err);
       setError('방 정보를 가져오는데 실패했습니다.');
-      // 개발 편의를 위한 임시 데이터
-      setRoomInfo({
-        id: roomId,
-        name: `Room #${roomId}`,
-        description: '음악을 함께 즐기는 공간',
-        createdAt: new Date().toISOString(),
-        participants: 1
-      });
     } finally {
       setLoading(false);
     }
