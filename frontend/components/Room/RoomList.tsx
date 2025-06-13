@@ -28,9 +28,38 @@ export default function RoomList({ rooms, loading, onCreateRoom }: RoomListProps
 
   if (loading) {
     return (
-      <div className="text-center py-16">
-        <div className="animate-spin w-12 h-12 mx-auto mb-4 border-4 border-t-purple-500 border-opacity-50 rounded-full"></div>
-        <p className="text-gray-300">방 목록을 불러오는 중...</p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-32 bg-gray-700 rounded-lg animate-pulse"></div>
+          <div className="h-10 w-24 bg-gray-700 rounded-lg animate-pulse"></div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="bg-gray-800 rounded-xl p-6 animate-pulse">
+              {/* 방 제목 스켈레톤 */}
+              <div className="h-6 bg-gray-700 rounded mb-2"></div>
+              
+              {/* 방 설명 스켈레톤 */}
+              <div className="space-y-2 mb-4">
+                <div className="h-4 bg-gray-700 rounded w-full"></div>
+                <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+              </div>
+              
+              {/* 참가자 수와 시간 스켈레톤 */}
+              <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-gray-700 rounded"></div>
+                  <div className="h-4 w-8 bg-gray-700 rounded"></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-gray-700 rounded"></div>
+                  <div className="h-4 w-16 bg-gray-700 rounded"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
