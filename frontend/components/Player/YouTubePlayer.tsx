@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import YouTube, { YouTubeEvent, YouTubePlayer as YTPlayer } from 'react-youtube';
 
 interface Track {
@@ -90,6 +90,23 @@ export default function YouTubePlayer({
   // 초기 지연 타이머 ID 관리
   const initDelayIdRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 볼륨 관련 상태 관리 (localStorage에서 불러오기)
+  const [localVolume, setLocalVolume] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('openJukebox_volume');
+      return saved ? Number(saved) : 50;
+    }
+    return 50;
+  });
+  const [localIsMuted, setLocalIsMuted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('openJukebox_muted');
+      return saved === 'true';
+    }
+    return false;
+  });
+  const lastVolumeBeforeMuteRef = useRef(50);
+
   // ===== 유틸리티 함수들 =====
   
   // 사용자 의도적 seek 감지 조건 확인
@@ -110,6 +127,69 @@ export default function YouTubePlayer({
      const isValidSyncPosition = (position: number | undefined): position is number => {
      return position !== undefined && position > 0;
    };
+
+  // 볼륨 관련 핸들러 함수들
+  const handleVolumeChange = (newVolume: number) => {
+    setLocalVolume(newVolume);
+    
+    // localStorage에 저장
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('openJukebox_volume', newVolume.toString());
+    }
+    
+    if (playerRef.current && isPlayerReady) {
+      try {
+        playerRef.current.setVolume(newVolume);
+        // 볼륨 변경 시 자동으로 음소거 해제
+        if (localIsMuted && newVolume > 0) {
+          setLocalIsMuted(false);
+          playerRef.current.unMute();
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('openJukebox_muted', 'false');
+          }
+        }
+      } catch (error) {
+        console.error('볼륨 설정 오류:', error);
+      }
+    }
+  };
+
+  const handleMuteToggle = () => {
+    const newMutedState = !localIsMuted;
+    setLocalIsMuted(newMutedState);
+    
+    // localStorage에 저장
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('openJukebox_muted', newMutedState.toString());
+    }
+    
+    if (playerRef.current && isPlayerReady) {
+      try {
+        if (newMutedState) {
+          lastVolumeBeforeMuteRef.current = localVolume;
+          playerRef.current.mute();
+        } else {
+          playerRef.current.unMute();
+          // 음소거 해제 시 이전 볼륨으로 복원
+          if (lastVolumeBeforeMuteRef.current > 0) {
+            playerRef.current.setVolume(lastVolumeBeforeMuteRef.current);
+          }
+        }
+      } catch (error) {
+        console.error('음소거 설정 오류:', error);
+      }
+    }
+  };
+
+  const getVolumeIcon = () => {
+    if (localIsMuted || localVolume === 0) {
+      return VolumeX;
+    } else if (localVolume < 50) {
+      return Volume1;
+    } else {
+      return Volume2;
+    }
+  };
 
   // ===== 이벤트 핸들러들 =====
   
@@ -387,6 +467,27 @@ export default function YouTubePlayer({
      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
    }, []);
 
+   // 플레이어 준비 시 초기 볼륨 설정
+   useEffect(() => {
+     if (isPlayerReady && playerRef.current) {
+       try {
+         const player = playerRef.current;
+         
+         // 초기 볼륨 설정
+         player.setVolume(localVolume);
+         
+         // 초기 음소거 상태 설정
+         if (localIsMuted) {
+           player.mute();
+         } else {
+           player.unMute();
+         }
+       } catch (error) {
+         console.error('초기 볼륨 설정 오류:', error);
+       }
+     }
+   }, [isPlayerReady, localVolume, localIsMuted]);
+
    // 컴포넌트 언마운트 시 정리
    useEffect(() => {
      return () => {
@@ -489,28 +590,89 @@ export default function YouTubePlayer({
 
   // ===== 렌더링 함수들 =====
 
+  // 볼륨 컨트롤 렌더링
+  const renderVolumeControl = () => {
+    const VolumeIcon = getVolumeIcon();
+    
+    return (
+      <div className="flex items-center justify-center gap-3 sm:gap-4">
+        {/* 음소거 토글 버튼 */}
+        <button
+          onClick={handleMuteToggle}
+          className="p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
+          title={localIsMuted ? "음소거 해제" : "음소거"}
+        >
+          <VolumeIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+        </button>
+
+        {/* 볼륨 슬라이더 (가로) - 반응형 */}
+        <div className="relative w-24 sm:w-32 md:w-40 h-2 sm:h-2.5 group cursor-pointer">
+          {/* 배경 트랙 */}
+          <div className="absolute inset-0 bg-gray-600 rounded-full group-hover:bg-gray-500 transition-colors duration-200"></div>
+          
+          {/* 진행률 바 (채워진 부분) */}
+          <div 
+            className="absolute left-0 top-0 h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full transition-all duration-200 group-hover:from-pink-400 group-hover:to-purple-500"
+            style={{ 
+              width: `${localVolume}%` 
+            }}
+          ></div>
+          
+          {/* 숨겨진 range input */}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={localVolume}
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-manipulation"
+            disabled={localIsMuted}
+          />
+          
+          {/* 드래그 핸들 */}
+          <div 
+            className={`absolute top-1/2 w-3 h-3 sm:w-4 sm:h-4 bg-white rounded-full shadow-lg border-2 border-pink-500 transform -translate-y-1/2 transition-all duration-200 ${
+              localIsMuted ? 'opacity-50' : 'group-hover:scale-110'
+            }`}
+            style={{ 
+              left: `calc(${localVolume}% - ${localVolume >= 50 ? '6px' : '6px'})`
+            }}
+          >
+            <div className="absolute inset-0.5 bg-pink-500 rounded-full opacity-80"></div>
+          </div>
+        </div>
+
+        {/* 볼륨 수치 표시 */}
+        <span className="text-sm sm:text-base text-gray-300 font-mono min-w-[2.5rem] sm:min-w-[3rem] text-center">
+          {localIsMuted ? 'MUTE' : `${localVolume}%`}
+        </span>
+      </div>
+    );
+  };
+
   // 컨트롤 버튼들
   const renderControls = () => {
     return (
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6">
         {/* 현재 재생 중인 트랙 정보 */}
         {currentVideo && (
-          <div className="mb-6 text-center">
-            <h3 className="text-xl font-semibold text-white mb-2 line-clamp-2">
+          <div className="mb-4 sm:mb-6 text-center px-2">
+            <h3 className="text-lg sm:text-xl font-semibold text-white mb-2 line-clamp-2">
               {currentVideo.title}
             </h3>
             <p className="text-gray-400 text-sm">{currentVideo.channel}</p>
           </div>
         )}
 
-        {/* 컨트롤 버튼들 */}
-        <div className="flex items-center justify-center gap-4">
+        {/* 재생 컨트롤 버튼들 */}
+        <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4 sm:mb-6">
           <button 
             onClick={onPrev}
-            className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
+            className="p-2.5 sm:p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
             title="이전 곡"
           >
-            <SkipBack className="w-5 h-5 text-white" />
+            <SkipBack className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </button>
           
           <button 
@@ -524,23 +686,28 @@ export default function YouTubePlayer({
                 onPlay();
               }
             }}
-            className="p-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-full transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
+            className="p-3 sm:p-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-full transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
             title={isPlaying ? "일시정지" : "재생"}
           >
             {isPlaying ? (
-              <Pause className="w-6 h-6 text-white" />
+              <Pause className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             ) : (
-              <Play className="w-6 h-6 text-white ml-0.5" />
+              <Play className="w-6 h-6 sm:w-7 sm:h-7 text-white ml-0.5" />
             )}
           </button>
           
           <button 
             onClick={onNext}
-            className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
+            className="p-2.5 sm:p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 hover:scale-105 backdrop-blur-sm border border-white/10"
             title="다음 곡"
           >
-            <SkipForward className="w-5 h-5 text-white" />
+            <SkipForward className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </button>
+        </div>
+
+        {/* 볼륨 컨트롤 (재생 컨트롤 아래) */}
+        <div className="flex justify-center">
+          {renderVolumeControl()}
         </div>
       </div>
     );
