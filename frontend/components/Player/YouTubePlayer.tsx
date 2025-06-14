@@ -29,7 +29,7 @@ interface YouTubePlayerProps {
   position?: number;
   lastUpdateTime?: number;
   onPlay: () => void;
-  onPause: () => void;
+  onPause: (reason?: 'user' | 'buffer' | 'background' | 'error') => void;
   onSeek: (position: number, index?: number) => Promise<void>;
   onNext: () => void;
   onPrev: () => void;
@@ -83,6 +83,9 @@ export default function YouTubePlayer({
   const [totalDuration, setTotalDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 페이지 가시성 상태 추적
+  const [isPageVisible, setIsPageVisible] = useState(true);
 
   // ===== 유틸리티 함수들 =====
   
@@ -196,10 +199,15 @@ export default function YouTubePlayer({
       // 일시정지 상태가 되었을 때, 사용자가 직접 버튼을 눌렀을 때만 onPause() 호출
       if (userPausedByButtonRef.current) {
         console.log('⏸️ (직접) YouTube 플레이어에서 일시정지 감지');
-        onPause();
+        onPause('user');
         userPausedByButtonRef.current = false;
+      } else if (!isPageVisible) {
+        console.log('⏸️ (백그라운드) YouTube 플레이어에서 일시정지 감지');
+        onPause('background');
       } else {
-        console.log('⏸️ (자동) YouTube 플레이어에서 일시정지 감지 - 서버 전파 안함');
+        // 자동 일시정지라도 전역 state를 맞춰 UI·서버 동기화 모두 어긋날 위험이 큽니다
+        console.log('⏸️ (버퍼링) 자동 일시정지');
+        onPause('buffer');
       }
     } else if (playerState === 0) {
       // 동영상 종료
@@ -360,6 +368,16 @@ export default function YouTubePlayer({
       console.error('서버 동기화 오류:', error);
     }
      }, [position, isPlayerReady, isDragging]);
+
+   // 페이지 가시성 감지
+   useEffect(() => {
+     const handleVisibilityChange = () => {
+       setIsPageVisible(!document.hidden);
+     };
+
+     document.addEventListener('visibilitychange', handleVisibilityChange);
+     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+   }, []);
 
    // 컴포넌트 언마운트 시 정리
    useEffect(() => {
