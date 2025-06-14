@@ -206,6 +206,10 @@ export default function YouTubePlayer({
       console.log('⏭️ 동영상 종료 - 다음 트랙으로');
       onNext();
     }
+    // 재생 이외의 모든 상태에서 보수적으로 초기화
+    else if (playerState !== 1) {
+      userPausedByButtonRef.current = false;
+    }
   };
 
   // ===== Effect 훅들 =====
