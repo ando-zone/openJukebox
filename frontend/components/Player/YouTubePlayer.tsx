@@ -408,6 +408,25 @@ export default function YouTubePlayer({
      }
    };
 
+   // 키보드 접근성을 위한 핸들러
+   const handleProgressKeyUp = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+     // 화살표 키, PageUp/PageDown, Home/End 등으로 조작했을 때만 처리
+     if (['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+       const finalTime = Number((e.target as HTMLInputElement).value);
+       
+       try {
+         await onSeek(finalTime);
+         setProgressBarTime(finalTime);
+       } catch (error) {
+         console.error('키보드 Seek 오류:', error);
+         // 실패 시 플레이어의 실제 위치로 복원
+         if (playerRef.current) {
+           setProgressBarTime(playerRef.current.getCurrentTime());
+         }
+       }
+     }
+   };
+
   // 시간 포맷팅
   const formatTime = (seconds: number): string => {
     if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -575,6 +594,7 @@ export default function YouTubePlayer({
               } as React.MouseEvent<HTMLInputElement>;
               handleProgressMouseUp(mouseEvent);
             }}
+            onKeyUp={handleProgressKeyUp} // 키보드 접근성 지원
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-manipulation"
             disabled={!isPlayerReady || !totalDuration}
           />
