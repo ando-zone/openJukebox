@@ -278,8 +278,14 @@ export default function YouTubePlayer({
     // 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
     
     if (playerState === 1 && !isPlaying) {
-      // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
-      console.log('▶️ YouTube 플레이어에서 재생 감지');
+      // 초기 로딩 중이거나 seek 중일 때는 자동 재생 상태 변경 방지
+      if (isInitialLoadingRef.current || isSeekingRef.current) {
+        console.log('🔄 초기화/seek 중 - 자동 재생 상태 변경 방지');
+        return;
+      }
+      
+      // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때만
+      console.log('▶️ YouTube 플레이어에서 재생 감지 (사용자 액션)');
       // 재생 시 일시정지 플래그 초기화 (안전장치)
       userPausedByButtonRef.current = false;
       onPlay();
