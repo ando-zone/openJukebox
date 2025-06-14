@@ -189,6 +189,8 @@ export default function YouTubePlayer({
     if (playerState === 1 && !isPlaying) {
       // 재생 시작 - 사용자가 직접 재생 버튼을 눌렀을 때
       console.log('▶️ YouTube 플레이어에서 재생 감지');
+      // 재생 시 일시정지 플래그 초기화 (안전장치)
+      userPausedByButtonRef.current = false;
       onPlay();
     } else if (playerState === 2 && isPlaying) {
       // 일시정지 상태가 되었을 때, 사용자가 직접 버튼을 눌렀을 때만 onPause() 호출
@@ -326,6 +328,9 @@ export default function YouTubePlayer({
     setIsDragging(false);
     stopProgressUpdater();
     
+    // 트랙 변경 시 일시정지 플래그도 초기화 (안전장치)
+    userPausedByButtonRef.current = false;
+    
     // 새 트랙 로드 후 업데이터 다시 시작
     if (isPlayerReady) {
       setTimeout(startProgressUpdater, 1000);
@@ -460,6 +465,8 @@ export default function YouTubePlayer({
                 userPausedByButtonRef.current = true;
                 onPause();
               } else {
+                // 재생 시 일시정지 플래그 확실히 초기화
+                userPausedByButtonRef.current = false;
                 onPlay();
               }
             }}
