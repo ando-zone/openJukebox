@@ -125,15 +125,10 @@ export default function YouTubePlayer({
     // 초기 로딩 완료 후 잠시 대기한 다음 플래그 해제
     setTimeout(() => {
       isInitialLoadingRef.current = false;
-
-      // 마스터 상태에 따라 플레이어 동기화
-      if (isPlaying && playerRef.current) {
-        try {
-          playerRef.current.playVideo();
-        } catch (error) {
-          console.error('초기 재생 동기화 오류:', error);
-        }
-      }
+      
+      // 새로운 클라이언트는 자동 재생하지 않음
+      // 마스터 상태 동기화는 useEffect에서 처리됨
+      console.log('🔄 새 클라이언트 초기화 완료 - 마스터 상태 동기화 대기 중');
     }, 1000); // 1초 후 초기 로딩 플래그 해제
   };
   
