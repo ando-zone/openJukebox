@@ -269,8 +269,23 @@ export const useWebSocket = (roomId?: string) => {
   }, [sendMessage]);
 
   // 일시정지
-  const pauseTrack = useCallback(() => {
-    console.log('⏸️ 사용자가 일시정지 버튼 클릭');
+  const pauseTrack = useCallback((reason?: 'user' | 'buffer' | 'background' | 'error') => {
+    console.log(`⏸️ 일시정지 요청 (이유: ${reason || 'unknown'})`);
+    
+    // reason에 따른 서버 전파 여부 결정
+    if (reason === 'background') {
+      // 백그라운드 전환은 서버 전파 안함
+      console.log('📱 백그라운드 전환 - 서버 전파 생략');
+      return;
+    }
+    
+    if (reason === 'buffer') {
+      // 버퍼링은 상태 동기화만 하고 서버 전파 안함
+      console.log('🔄 버퍼링 일시정지 - 서버 전파 생략');
+      return;
+    }
+    
+    // user 또는 error인 경우만 서버로 전파
     sendMessage('pause');
   }, [sendMessage]);
 
