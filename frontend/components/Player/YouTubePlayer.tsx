@@ -87,6 +87,9 @@ export default function YouTubePlayer({
   // 페이지 가시성 상태 추적
   const [isPageVisible, setIsPageVisible] = useState(true);
 
+  // 초기 지연 타이머 ID 관리
+  const initDelayIdRef = useRef<NodeJS.Timeout | null>(null);
+
   // ===== 유틸리티 함수들 =====
   
   // 사용자 의도적 seek 감지 조건 확인
@@ -122,19 +125,24 @@ export default function YouTubePlayer({
       console.error('플레이어 초기화 오류:', error);
     }
     
-    // 초기 로딩 완료 후 잠시 대기한 다음 플래그 해제
-    setTimeout(() => {
-      isInitialLoadingRef.current = false;
-
-      // 마스터 상태에 따라 플레이어 동기화
-      if (isPlaying && playerRef.current) {
-        try {
-          playerRef.current.playVideo();
-        } catch (error) {
-          console.error('초기 재생 동기화 오류:', error);
+    // 실제 플레이어 상태를 확인하여 초기화 완료 판단
+    const checkInitComplete = () => {
+      try {
+        if (event.target.getPlayerState() !== -1) {
+          isInitialLoadingRef.current = false;
+          console.log('🔄 새 클라이언트 초기화 완료 - 마스터 상태 동기화 대기 중');
+        } else {
+          // 아직 준비되지 않았다면 다시 확인
+          initDelayIdRef.current = setTimeout(checkInitComplete, 100);
         }
+      } catch (error) {
+        console.error('플레이어 상태 확인 오류:', error);
+        // 에러 발생 시 fallback으로 초기화 완료 처리
+        isInitialLoadingRef.current = false;
       }
-    }, 1000); // 1초 후 초기 로딩 플래그 해제
+    };
+    
+    checkInitComplete();
   };
   
   const handleStateChange = (event: YouTubeEvent) => {
@@ -322,7 +330,7 @@ export default function YouTubePlayer({
     }
   };
 
-  // 재생 상태 변경 시 업데이터 관리
+  // 재생 상태 변경 시 업데이트 관리
   useEffect(() => {
     if (isPlaying) {
       startProgressUpdater();
@@ -383,6 +391,11 @@ export default function YouTubePlayer({
    useEffect(() => {
      return () => {
        stopProgressUpdater();
+       // 초기화 타이머도 정리
+       if (initDelayIdRef.current) {
+         clearTimeout(initDelayIdRef.current);
+         initDelayIdRef.current = null;
+       }
      };
    }, []);
 
