@@ -485,8 +485,8 @@ export default function YouTubePlayer({
           <button 
             onClick={() => {
               if (isPlaying) {
-                userPausedByButtonRef.current = true;
-                onPause();
+                userPausedByButtonRef.current = true;        // 플래그만 설정
+                playerRef.current?.pauseVideo();             // 실제 일시정지 트리거
               } else {
                 // 재생 시 일시정지 플래그 확실히 초기화
                 userPausedByButtonRef.current = false;
