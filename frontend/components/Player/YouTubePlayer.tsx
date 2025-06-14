@@ -67,8 +67,11 @@ export default function YouTubePlayer({
   // seek 작업 중인지 추적 (더 정확함)
   const isSeekingRef = useRef(false);
   
-  // 초기 로딩 중인지 추적 (자동 재생 방지용)
-  const isInitialLoadingRef = useRef(true);
+  // 초기화 상태 관리 (더 엄격한 제어)
+  const initializationStateRef = useRef<'loading' | 'waiting_sync' | 'ready'>('loading');
+  
+  // 마스터 동기화 완료 여부
+  const masterSyncReceivedRef = useRef(false);
   
   // 사용자가 직접 일시정지 버튼을 눌렀는지 여부를 추적하는 ref
   const userPausedByButtonRef = useRef(false);
@@ -193,7 +196,7 @@ export default function YouTubePlayer({
 
   // ===== 이벤트 핸들러들 =====
   
-  const handleReady = (event: YouTubeEvent) => {
+  const handleReady = async (event: YouTubeEvent) => {
     playerRef.current = event.target;
     setIsPlayerReady(true);
     
@@ -205,33 +208,65 @@ export default function YouTubePlayer({
       console.error('플레이어 초기화 오류:', error);
     }
     
-    // 실제 플레이어 상태를 확인하여 초기화 완료 판단
-    const checkInitComplete = () => {
-      try {
-        if (event.target.getPlayerState() !== -1) {
-          isInitialLoadingRef.current = false;
-          console.log('🔄 새 클라이언트 초기화 완료 - 마스터 상태 동기화 대기 중');
-        } else {
-          // 아직 준비되지 않았다면 다시 확인
-          initDelayIdRef.current = setTimeout(checkInitComplete, 100);
-        }
-      } catch (error) {
-        console.error('플레이어 상태 확인 오류:', error);
-        // 에러 발생 시 fallback으로 초기화 완료 처리
-        isInitialLoadingRef.current = false;
-      }
+    // 플레이어 준비 완료 후 마스터 동기화 대기 상태로 전환
+    const waitForPlayerReady = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        const checkReady = () => {
+          try {
+            if (event.target.getPlayerState() !== -1) {
+              console.log('🔄 플레이어 준비 완료 - 마스터 동기화 대기 중...');
+              initializationStateRef.current = 'waiting_sync';
+              resolve();
+            } else {
+              setTimeout(checkReady, 100);
+            }
+          } catch (error) {
+            console.error('플레이어 상태 확인 오류:', error);
+            // 에러 발생 시에도 다음 단계로 진행
+            initializationStateRef.current = 'waiting_sync';
+            resolve();
+          }
+        };
+        checkReady();
+      });
     };
+
+    await waitForPlayerReady();
     
-    checkInitComplete();
+    // 마스터 동기화를 최대 3초간 대기
+    const waitForMasterSync = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log('⚠️ 마스터 동기화 타임아웃 - 기본 상태로 진행');
+          initializationStateRef.current = 'ready';
+          resolve();
+        }, 3000);
+
+        // 동기화 수신 체크
+        const checkSync = () => {
+          if (masterSyncReceivedRef.current) {
+            clearTimeout(timeout);
+            console.log('✅ 마스터 동기화 완료');
+            initializationStateRef.current = 'ready';
+            resolve();
+          } else {
+            setTimeout(checkSync, 100);
+          }
+        };
+        checkSync();
+      });
+    };
+
+    await waitForMasterSync();
   };
   
   const handleStateChange = (event: YouTubeEvent) => {
     const playerState = event.data;
     const now = Date.now();
     
-    // 초기 로딩 중에는 상태 변경 무시 (자동 재생 방지)
-    if (isInitialLoadingRef.current) {
-      console.log('🔄 초기 로딩 중 - 상태 변경 무시:', playerState);
+    // 초기화 완료 전에는 상태 변경 무시 (자동 재생 방지)
+    if (initializationStateRef.current !== 'ready') {
+      console.log('🔄 초기화 미완료 - 상태 변경 무시:', playerState, initializationStateRef.current);
       return;
     }
     
@@ -278,9 +313,9 @@ export default function YouTubePlayer({
     // 0=종료, 1=재생, 2=일시정지, 3=버퍼링, 5=큐
     
     if (playerState === 1 && !isPlaying) {
-      // 초기 로딩 중이거나 seek 중일 때는 자동 재생 상태 변경 방지
-      if (isInitialLoadingRef.current || isSeekingRef.current) {
-        console.log('🔄 초기화/seek 중 - 자동 재생 상태 변경 방지');
+      // seek 중일 때는 자동 재생 상태 변경 방지
+      if (isSeekingRef.current) {
+        console.log('🔄 seek 중 - 자동 재생 상태 변경 방지');
         return;
       }
       
@@ -335,9 +370,29 @@ export default function YouTubePlayer({
   
   // 마스터 클라이언트 동기화 콜백 등록
   useEffect(() => {
-    setOnSyncUpdate((state: AppState) => {
+    setOnSyncUpdate(async (state: AppState) => {
       if (!isPlayerReady || !playerRef.current) {
         return;
+      }
+      
+      // 첫 동기화 수신 시 플래그 설정
+      if (!masterSyncReceivedRef.current) {
+        masterSyncReceivedRef.current = true;
+        console.log('🔄 첫 마스터 동기화 수신 - 상태 적용 중...');
+        
+        // 마스터의 재생 상태를 강제 적용
+        try {
+          const player = playerRef.current;
+          if (state.playing) {
+            console.log('▶️ 마스터 재생 중 - 재생 시작');
+            player.playVideo();
+          } else {
+            console.log('⏸️ 마스터 일시정지 중 - 일시정지 적용');
+            player.pauseVideo();
+          }
+        } catch (error) {
+          console.error('초기 재생 상태 동기화 오류:', error);
+        }
       }
       
       try {
@@ -367,6 +422,7 @@ export default function YouTubePlayer({
                 
                 // seekTo 실행
                 player.seekTo(targetPosition, true);
+                console.log(`🔄 위치 동기화: ${currentPlayerTime}초 → ${targetPosition}초`);
               } else {
                 console.log('🔄 동기화 스킵 - 플레이어 준비 안됨:', { duration, targetPosition, playerState });
               }
@@ -434,8 +490,12 @@ export default function YouTubePlayer({
     setIsDragging(false);
     stopProgressUpdater();
     
-    // 트랙 변경 시 일시정지 플래그도 초기화 (안전장치)
+    // 트랙 변경 시 초기화 상태 리셋
+    initializationStateRef.current = 'loading';
+    masterSyncReceivedRef.current = false;
     userPausedByButtonRef.current = false;
+    
+    console.log('🔄 트랙 변경 - 초기화 상태 리셋');
     
     // 새 트랙 로드 후 업데이터 다시 시작
     if (isPlayerReady) {
@@ -498,6 +558,10 @@ export default function YouTubePlayer({
    useEffect(() => {
      return () => {
        stopProgressUpdater();
+       // 초기화 상태 리셋
+       initializationStateRef.current = 'loading';
+       masterSyncReceivedRef.current = false;
+       
        // 초기화 타이머도 정리
        if (initDelayIdRef.current) {
          clearTimeout(initDelayIdRef.current);
